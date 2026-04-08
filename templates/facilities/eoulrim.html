@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}카페 어울림 - 편익시설{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 page-header">
+    <h4 class="mb-0">
+        <i class="bi bi-cup-hot" style="color:#2e7d32"></i> 카페 어울림
+    </h4>
+    <a href="{% url 'facilities:menu' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> 편익시설 메뉴
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body text-center text-muted py-5">
+        <i class="bi bi-tools fs-2 d-block mb-2"></i>
+        준비 중입니다.
+    </div>
+</div>
+{% endblock %}

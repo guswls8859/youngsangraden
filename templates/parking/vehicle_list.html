@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load parking_tags %}
+{% block title %}주차 관리{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 page-header">
+    <h4 class="mb-0"><i class="bi bi-p-circle"></i> 주차 관리</h4>
+    <a href="{% url 'parking:create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> 차량 등록
+    </a>
+</div>
+
+<!-- 필터 탭 -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if filter == 'active' %}active{% endif %}" href="?filter=active">
+            출입 가능 차량
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if filter == 'all' %}active{% endif %}" href="?filter=all">
+            전체
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if filter == 'expired' %}active{% endif %}" href="?filter=expired">
+            기간 만료
+        </a>
+    </li>
+</ul>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>차량 번호</th>
+                    <th>소속</th>
+                    <th class="d-none d-md-table-cell">핸드폰</th>
+                    <th>출입 기간</th>
+                    <th>오늘 상태</th>
+                    <th class="d-none d-md-table-cell">비고</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vehicle in vehicles %}
+                {% with log=today_logs|get_item:vehicle.pk %}
+                <tr>
+                    <td class="fw-semibold">{{ vehicle.car_number }}</td>
+                    <td>{{ vehicle.organization }}</td>
+                    <td class="d-none d-md-table-cell">{{ vehicle.phone|default:"-" }}</td>
+                    <td class="small">
+                        {{ vehicle.start_date }} ~ {{ vehicle.end_date }}
+                        {% if not vehicle.is_active %}
+                        <span class="badge bg-secondary ms-1">만료</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not vehicle.is_active %}
+                        <span class="badge bg-light text-muted border">-</span>
+                        {% elif log %}
+                            {% if log.status == 'entered' %}
+                            <span class="badge bg-success">입차</span>
+                            {% elif log.status == 'exited' %}
+                            <span class="badge bg-secondary">출차</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">대기중</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="badge bg-warning text-dark">대기중</span>
+                        {% endif %}
+                    </td>
+                    <td class="d-none d-md-table-cell small text-muted">{{ vehicle.note|truncatechars:30|default:"-" }}</td>
+                    <td>
+                        <a href="{% url 'parking:detail' vehicle.pk %}" class="btn btn-sm btn-outline-primary">상세</a>
+                    </td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">등록된 차량이 없습니다.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

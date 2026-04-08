@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}{% if object %}보고서 수정{% else %}보고서 작성{% endif %} - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <h4 class="mb-4">
+            <i class="bi bi-pencil-square"></i>
+            {% if object %}업무보고서 수정{% else %}일일 업무보고서 작성{% endif %}
+        </h4>
+
+        <form method="post" id="reportForm">
+            {% csrf_token %}
+            <input type="hidden" name="task_count" id="task_count" value="0">
+
+            <!-- 날짜 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <label class="form-label fw-bold">{{ form.report_date.label }}</label>
+                    {{ form.report_date }}
+                </div>
+            </div>
+
+            <!-- 완료 업무 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-check2-circle text-primary"></i> 금일 완료 업무</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addTask('completed')">
+                        <i class="bi bi-plus"></i> 추가
+                    </button>
+                </div>
+                <div id="section-completed">
+                    <div id="empty-completed" class="text-muted small text-center py-3">완료한 업무를 추가하세요</div>
+                </div>
+            </div>
+
+            <!-- 진행 중 업무 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-arrow-repeat text-warning"></i> 진행 중 업무</span>
+                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="addTask('in_progress')">
+                        <i class="bi bi-plus"></i> 추가
+                    </button>
+                </div>
+                <div id="section-in_progress">
+                    <div id="empty-in_progress" class="text-muted small text-center py-3">진행 중인 업무를 추가하세요</div>
+                </div>
+            </div>
+
+            <!-- 내일 예정 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-calendar2-plus text-info"></i> 내일 예정 업무</span>
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="addTask('tomorrow')">
+                        <i class="bi bi-plus"></i> 추가
+                    </button>
+                </div>
+                <div id="section-tomorrow">
+                    <div id="empty-tomorrow" class="text-muted small text-center py-3">내일 예정된 업무를 추가하세요</div>
+                </div>
+            </div>
+
+            <!-- 이슈 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <span class="fw-bold"><i class="bi bi-exclamation-triangle text-danger"></i> 이슈 및 특이사항</span>
+                </div>
+                <div class="card-body">
+                    {{ form.issues }}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-send"></i> 제출
+                </button>
+                <a href="{% url 'reports:list' %}" class="btn btn-outline-secondary">취소</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 기존 항목 데이터 (수정 시에만)
+const existingTasks = {{ existing_tasks|default:"[]"|safe }};
+
+let taskIndex = 0;
+
+function addTask(category, content = '', progress = 0) {
+    const idx = taskIndex++;
+    const section = document.getElementById('section-' + category);
+    const emptyMsg = document.getElementById('empty-' + category);
+
+    const progressColors = {
+        'completed': 'bg-primary',
+        'in_progress': 'bg-warning',
+        'tomorrow': 'bg-info',
+    };
+    const barColor = progressColors[category] || 'bg-primary';
+
+    const row = document.createElement('div');
+    row.className = 'task-row border-bottom px-3 py-2';
+    row.innerHTML = `
+        <input type="hidden" name="task_${idx}_category" value="${category}">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <input type="text" name="task_${idx}_content"
+                class="form-control form-control-sm flex-grow-1"
+                placeholder="업무 내용 입력" value="${escapeHtml(content)}" required>
+            <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" onclick="removeTask(this)">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small" style="min-width:60px">진행률</span>
+            <input type="range" name="task_${idx}_progress"
+                class="form-range flex-grow-1" min="0" max="100" step="5" value="${progress}"
+                oninput="updateProgress(this)">
+            <span class="fw-semibold small" style="min-width:38px">${progress}%</span>
+        </div>
+        <div class="progress mt-1" style="height:6px">
+            <div class="progress-bar ${barColor}" role="progressbar"
+                style="width:${progress}%" id="bar-${idx}"></div>
+        </div>
+    `;
+
+    // empty 메시지 바로 앞에 삽입
+    section.insertBefore(row, emptyMsg);
+    emptyMsg.style.display = 'none';
+    updateTaskCount();
+}
+
+function removeTask(btn) {
+    const row = btn.closest('.task-row');
+    const section = row.parentElement;
+    row.remove();
+    const emptyMsg = section.querySelector('[id^="empty-"]');
+    if (emptyMsg && section.querySelectorAll('.task-row').length === 0) {
+        emptyMsg.style.display = '';
+    }
+    updateTaskCount();
+}
+
+function updateProgress(input) {
+    const val = input.value;
+    input.nextElementSibling.textContent = val + '%';
+    // progress bar
+    const row = input.closest('.task-row');
+    const bar = row.querySelector('.progress-bar');
+    if (bar) bar.style.width = val + '%';
+}
+
+function updateTaskCount() {
+    // 전체 task 인덱스는 taskIndex로 관리 (삭제된 것 포함)
+    // 실제 제출 시 뷰에서 빈 content를 걸러냄
+    document.getElementById('task_count').value = taskIndex;
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 페이지 로드 시 기존 항목 렌더링
+document.addEventListener('DOMContentLoaded', function () {
+    existingTasks.forEach(function (task) {
+        addTask(task.category, task.content, task.progress);
+    });
+});
+</script>
+{% endblock %}

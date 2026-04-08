@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}안내센터 일별 현황 - {{ target_date }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 page-header">
+    <h4 class="mb-0"><i class="bi bi-calendar3"></i> 안내센터 일별 현황</h4>
+    <a href="{% url 'info:list' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-list-ul"></i> <span class="d-none d-sm-inline">목록</span>
+    </a>
+</div>
+
+<!-- 날짜 네비게이션 -->
+<div class="card shadow-sm mb-4 nav-date">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="?date={{ prev_date|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> <span class="d-none d-sm-inline">전날</span>
+            </a>
+            <div class="text-center d-flex align-items-center gap-3">
+                <span class="fw-bold date-label">{{ target_date|date:"Y년 m월 d일 (D)" }}</span>
+                <form method="get" class="d-inline">
+                    <input type="date" name="date" class="form-control form-control-sm"
+                        style="width:auto" value="{{ target_date|date:'Y-m-d' }}"
+                        onchange="this.form.submit()">
+                </form>
+            </div>
+            <a href="?date={{ next_date|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+                <span class="d-none d-sm-inline">다음날</span> <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if reports %}
+    {% for report in reports %}
+    {% with all_items=report.items.all %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">
+                <i class="bi bi-person-circle"></i>
+                {{ report.author.get_full_name|default:report.author.username }}
+                <span class="text-muted fw-normal small ms-1">{{ report.author.department }}</span>
+            </span>
+            <span class="badge bg-warning text-dark">
+                <i class="bi bi-bus-front"></i> 셔틀 {{ report.shuttle_total }}명
+            </span>
+        </div>
+        <div class="card-body pb-2">
+
+            <!-- 인포메이션 -->
+            <div class="mb-3">
+                <div class="fw-semibold small mb-1" style="color:#2e7d32">
+                    <i class="bi bi-person-lines-fill"></i> 인포메이션
+                </div>
+                {% with info_items=all_items|dictsort:"order" %}
+                <ul class="mb-1 ps-3">
+                    {% for item in info_items %}
+                        {% if item.section == 'info' %}
+                        <li class="small">{{ item.content }}</li>
+                        {% endif %}
+                    {% empty %}
+                    <li class="small text-muted">(내용 없음)</li>
+                    {% endfor %}
+                </ul>
+                {% endwith %}
+                {% if report.info_note %}
+                <div class="small text-danger mt-1">
+                    <i class="bi bi-exclamation-triangle"></i> {{ report.info_note }}
+                </div>
+                {% endif %}
+            </div>
+
+            <hr class="my-2">
+
+            <!-- 셔틀 -->
+            <div class="mb-3">
+                <div class="fw-semibold small mb-1" style="color:#e65100">
+                    <i class="bi bi-bus-front"></i> 셔틀
+                </div>
+                <ul class="mb-0 ps-3">
+                    {% for item in all_items %}
+                        {% if item.section == 'shuttle' %}
+                        <li class="small">{{ item.content }}</li>
+                        {% endif %}
+                    {% empty %}
+                    <li class="small text-muted">(내용 없음)</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <hr class="my-2">
+
+            <!-- 순찰 -->
+            <div>
+                <div class="fw-semibold small mb-1" style="color:#1565c0">
+                    <i class="bi bi-shield-check"></i> 순찰
+                </div>
+                <ul class="mb-1 ps-3">
+                    {% for item in all_items %}
+                        {% if item.section == 'patrol' %}
+                        <li class="small">{{ item.content }}</li>
+                        {% endif %}
+                    {% empty %}
+                    <li class="small text-muted">(내용 없음)</li>
+                    {% endfor %}
+                </ul>
+                {% if report.patrol_note %}
+                <div class="small text-danger mt-1">
+                    <i class="bi bi-exclamation-triangle"></i> {{ report.patrol_note }}
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+        <div class="card-footer text-muted small">
+            작성: {{ report.created_at|date:"H:i" }} &nbsp;|&nbsp; 수정: {{ report.updated_at|date:"H:i" }}
+        </div>
+    </div>
+    {% endwith %}
+    {% endfor %}
+{% else %}
+<div class="card shadow-sm">
+    <div class="card-body text-center text-muted py-5">
+        <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+        {{ target_date|date:"Y년 m월 d일" }}에 제출된 보고서가 없습니다.
+    </div>
+</div>
+{% endif %}
+{% endblock %}

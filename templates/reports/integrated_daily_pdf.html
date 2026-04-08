@@ -1,0 +1,360 @@
+{% load humanize %}<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>용산어린이정원 일일업무보고</title>
+<style>
+@page {
+    size: A4;
+    margin: 10mm 10mm 10mm 10mm;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Apple SD Gothic Neo', 'Apple SD 산돌고딕 Neo', 'Malgun Gothic', 'NanumGothic', sans-serif;
+    font-size: 8.5pt;
+    color: #000;
+    line-height: 1.3;
+}
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+td, th {
+    border: 0.6pt solid #444;
+    vertical-align: middle;
+    padding: 2pt 4pt;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+}
+.c  { text-align: center; }
+.r  { text-align: right; }
+.l  { text-align: left; }
+.pre{ white-space: pre-wrap; }
+.nb { border: none; }
+
+/* ■ 섹션 전체 폭 헤더 (금일 방문현황 등) */
+.sec-full {
+    background: #1F3864;
+    color: #fff;
+    font-weight: bold;
+    font-size: 9pt;
+    padding: 3pt 6pt;
+}
+/* ■ 좁은 섹션 마커 (운영관리, 전일방문현황 등 좌측 셀) */
+.sec-side {
+    background: #1F3864;
+    color: #fff;
+    font-weight: bold;
+    font-size: 8pt;
+    text-align: center;
+    vertical-align: middle;
+}
+/* 서브 레이블: 내부시설, 잔디마당, 스포츠필드 등 */
+.lbl {
+    background: #BDD7EE;
+    font-size: 8pt;
+    text-align: center;
+    vertical-align: middle;
+}
+/* 열 헤더 (주출입구, 부출입구 등) */
+.hdr {
+    background: #F2F2F2;
+    font-weight: bold;
+    font-size: 8pt;
+    text-align: center;
+    vertical-align: middle;
+}
+/* 편익시설 매출 */
+.green {
+    background: #E2EFDA;
+    font-weight: bold;
+    text-align: center;
+    vertical-align: middle;
+}
+/* 스포츠필드 내부 테이블 */
+.sf td, .sf th {
+    border: 0.4pt solid #666;
+    padding: 1.5pt 2pt;
+    font-size: 7.5pt;
+    text-align: center;
+    vertical-align: middle;
+}
+.sf .sh  { background: #BDD7EE; font-weight: bold; font-size: 7.5pt; }
+.sf .ssh { background: #D9E1F2; font-weight: bold; font-size: 7pt; }
+.sf .sl  { background: #F2F2F2; text-align: left; font-size: 7.5pt; padding: 1.5pt 4pt; }
+/* TIP */
+.tip { font-size: 7.5pt; padding: 2pt 5pt; background: #FAFAFA; }
+/* 값 강조 */
+.big { font-size: 11pt; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<!-- =========================================================
+     헤더: 날짜 | 제목(노랑) | 확인/점검
+========================================================= -->
+<table style="margin-bottom:0; border-bottom:none;">
+  <colgroup>
+    <col style="width:15%">
+    <col style="width:60%">
+    <col style="width:25%">
+  </colgroup>
+  <tr>
+    <td style="font-size:11pt; font-weight:bold; text-align:center; padding:5pt 3pt; border-right:none; border-bottom:0.6pt solid #444;">
+      {{ target_date|date:"Y.m.d." }}
+    </td>
+    <td style="font-size:14pt; font-weight:bold; text-align:center; padding:6pt 3pt;
+               background:#FFFF00; border-left:0.6pt solid #444; border-right:0.6pt solid #444; border-bottom:0.6pt solid #444;">
+      (운영관리) 용산어린이정원 일일보고
+    </td>
+    <td style="padding:0; border-left:none; vertical-align:top; border-bottom:0.6pt solid #444;">
+      <table style="border-collapse:collapse; width:100%; height:100%;">
+        <tr>
+          <td style="border:none; border-bottom:0.4pt solid #777; padding:3pt 5pt; font-size:8pt; font-weight:bold;">
+            확 인(L H) :
+          </td>
+        </tr>
+        <tr>
+          <td style="border:none; padding:3pt 5pt; font-size:8pt; font-weight:bold;">
+            점 검(중앙) :
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- =========================================================
+     본문 메인 테이블 (8열)
+     C1:7%  C2:8%  C3:10%  C4:13%  C5-C8:각15.5%
+========================================================= -->
+<table>
+  <colgroup>
+    <col style="width:7%">
+    <col style="width:8%">
+    <col style="width:10%">
+    <col style="width:13%">
+    <col style="width:15.5%">
+    <col style="width:15.5%">
+    <col style="width:15.5%">
+    <col style="width:15.5%">
+  </colgroup>
+
+  <!-- ① 금일 방문현황 - 전체 폭 헤더 -->
+  <tr>
+    <td class="sec-full" colspan="8">&#9632; 금일 &nbsp; 방문현황</td>
+  </tr>
+  <tr>
+    <td class="big" colspan="2" style="padding:4pt 6pt;">입장 {{ ops.today_total|default:0|intcomma }}명</td>
+    <td class="hdr" colspan="2">주출입구 도보방문(명)</td>
+    <td class="hdr" colspan="2">부출입구 도보방문(명)</td>
+    <td class="hdr" colspan="2">차량방문(명)</td>
+  </tr>
+  <tr>
+    <td colspan="2" style="border-top:none; padding:2pt 6pt; color:#555; font-size:7.5pt;"></td>
+    <td class="c big" colspan="2">{{ ops.main_gate_walk|default:0|intcomma }}</td>
+    <td class="c big" colspan="2">{{ ops.sub_gate_walk|default:0|intcomma }}</td>
+    <td class="c big" colspan="2">{{ ops.car_visit|default:0|intcomma }}</td>
+  </tr>
+
+  <!-- ② 전일 방문현황 / 명일 기상 -->
+  <tr>
+    <td class="sec-side" colspan="2" style="padding:4pt 3pt;">&#9632; 전일 &nbsp; 방문현황</td>
+    <td class="big" colspan="2" style="padding:4pt 6pt;">입장 {{ ops.yesterday_total|default:0|intcomma }}명</td>
+    <td class="hdr" colspan="2">명일 기상상황</td>
+    <td colspan="2" style="padding:4pt 6pt; font-size:9pt; font-weight:bold;">
+      기온 {{ ops.tomorrow_temp_min|default:0 }}°~ {{ ops.tomorrow_temp_max|default:0 }}°<br>
+      강수확률 {{ ops.tomorrow_rain_pct|default:0 }}%
+    </td>
+  </tr>
+
+  <!-- 작성TIP -->
+  <tr>
+    <td class="tip" colspan="8">
+      &lt;작성TIP&gt; 조치필요 또는 민원지적 등 기타 공유사항을 특이사항에 구체적으로 기재
+      (<strong>필요시 별지보고 및 사진첨부</strong>)
+    </td>
+  </tr>
+
+  <!-- ③ 운영관리 헤더 행 -->
+  <tr>
+    <td class="sec-side" rowspan="6">&#9632;<br>운영<br>관리</td>
+    <td class="lbl" colspan="2">시 설</td>
+    <td class="hdr" colspan="5" style="text-align:center; font-size:8.5pt;">점 검 &nbsp; 및 &nbsp; 작 업 &nbsp; 내 용</td>
+  </tr>
+
+  <!-- 내부시설 -->
+  <tr>
+    <td class="lbl" rowspan="4">시설</td>
+    <td class="lbl" style="font-size:7.5pt; padding:2pt 3pt;">내부시설<br><span style="font-size:7pt;">(용산서가, 전시관 등)</span></td>
+    <td class="pre" colspan="5" style="min-height:20pt; padding:3pt 5pt;">{{ ops.facility_interior|default:"" }}</td>
+  </tr>
+
+  <!-- 잔디마당 -->
+  <tr>
+    <td class="lbl" style="font-size:7.5pt;">잔디마당<br>가로수길<br>전망언덕</td>
+    <td class="pre" colspan="5" style="min-height:20pt; padding:3pt 5pt;">{{ ops.facility_outdoor|default:"" }}</td>
+  </tr>
+
+  <!-- 스포츠필드 -->
+  <tr>
+    <td class="lbl" style="font-size:7.5pt;">스포츠<br>필드</td>
+    <td colspan="5" style="padding:4pt 5pt;">
+      <div style="font-size:8pt; margin-bottom:3pt;">○ 스포츠필드 &nbsp; 이용 &nbsp; 예약</div>
+      <!-- 스포츠필드 내부 테이블 -->
+      <table class="sf">
+        <colgroup>
+          <col style="width:22%">
+          <col style="width:9%"><col style="width:9%"><col style="width:9%">
+          <col style="width:9%"><col style="width:9%"><col style="width:9%">
+          <col style="width:24%"><!-- 여백 -->
+        </colgroup>
+        <tr>
+          <th class="sh" rowspan="2">구분</th>
+          <th class="sh" colspan="3">축구장</th>
+          <th class="sh" colspan="3">테니스장</th>
+          <td style="border:none;" rowspan="2"></td>
+        </tr>
+        <tr>
+          <th class="ssh">분류</th><th class="ssh">예약</th><th class="ssh">입장</th>
+          <th class="ssh">분류</th><th class="ssh">예약</th><th class="ssh">입장</th>
+        </tr>
+        {% for row in sf_slots.st_rows %}
+        <tr>
+          <td class="sl">{{ row.label }}</td>
+          <td>{{ row.soccer.cat|default:"-" }}</td>
+          <td>{% if row.soccer.reserved is not None %}{{ row.soccer.reserved }}{% else %}-{% endif %}</td>
+          <td>{% if row.soccer.actual is not None %}{{ row.soccer.actual }}{% else %}-{% endif %}</td>
+          <td>{{ row.tennis.cat|default:"-" }}</td>
+          <td>{% if row.tennis.reserved is not None %}{{ row.tennis.reserved }}{% else %}-{% endif %}</td>
+          <td>{% if row.tennis.actual is not None %}{{ row.tennis.actual }}{% else %}-{% endif %}</td>
+          <td style="border:none;"></td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <th class="sh" rowspan="2">구분</th>
+          <th class="sh" colspan="3">야구장</th>
+          <th class="sh" colspan="3">합계</th>
+          <td style="border:none;" rowspan="2"></td>
+        </tr>
+        <tr>
+          <th class="ssh">분류</th><th class="ssh">예약</th><th class="ssh">입장</th>
+          <th class="ssh">분류</th><th class="ssh">예약</th><th class="ssh">입장</th>
+        </tr>
+        {% for row in sf_slots.bb_rows %}
+        <tr>
+          <td class="sl">{{ row.label }}</td>
+          <td>{{ row.baseball.cat|default:"-" }}</td>
+          <td>{% if row.baseball.reserved is not None %}{{ row.baseball.reserved }}{% else %}-{% endif %}</td>
+          <td>{% if row.baseball.actual is not None %}{{ row.baseball.actual }}{% else %}-{% endif %}</td>
+          <td>{{ row.total.cat|default:"-" }}</td>
+          <td>{% if row.total.reserved is not None %}{{ row.total.reserved }}{% else %}-{% endif %}</td>
+          <td>{% if row.total.actual is not None %}{{ row.total.actual }}{% else %}-{% endif %}</td>
+          <td style="border:none;"></td>
+        </tr>
+        {% endfor %}
+      </table>
+    </td>
+  </tr>
+
+  <!-- 분수정원/잼잼카페 -->
+  <tr>
+    <td class="lbl" style="font-size:7.5pt;">분수정원<br>잼잼카페</td>
+    <td class="pre" colspan="5" style="min-height:18pt; padding:3pt 5pt;">{{ ops.facility_fountain|default:"" }}</td>
+  </tr>
+
+  <!-- 주차장 (운영관리 rowspan 마지막 행) -->
+  <tr>
+    <td class="lbl" colspan="3" style="text-align:center;">주차장</td>
+    <td colspan="5" style="padding:0;">
+      <table style="border-collapse:collapse; width:100%; border:none;">
+        <colgroup>
+          <col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%">
+        </colgroup>
+        <tr>
+          <td class="hdr" style="border:none; border-right:0.5pt solid #888; font-size:8pt;">다둥이 &nbsp; 대(  )</td>
+          <td class="hdr" style="border:none; border-right:0.5pt solid #888; font-size:8pt;">장애인 &nbsp; 대(  )</td>
+          <td class="hdr" style="border:none; border-right:0.5pt solid #888; font-size:8pt;">임산부 &nbsp; 대(  )</td>
+          <td class="hdr" style="border:none; font-size:8pt;">어린이단체 대(  )</td>
+        </tr>
+        <tr>
+          <td style="border:none; border-right:0.5pt solid #888; border-top:0.5pt solid #888; text-align:center; font-size:12pt; font-weight:bold; padding:3pt;">{{ ops.parking_family|default:0 }}</td>
+          <td style="border:none; border-right:0.5pt solid #888; border-top:0.5pt solid #888; text-align:center; font-size:12pt; font-weight:bold; padding:3pt;">{{ ops.parking_disabled|default:0 }}</td>
+          <td style="border:none; border-right:0.5pt solid #888; border-top:0.5pt solid #888; text-align:center; font-size:12pt; font-weight:bold; padding:3pt;">{{ ops.parking_pregnant|default:0 }}</td>
+          <td style="border:none; border-top:0.5pt solid #888; text-align:center; font-size:12pt; font-weight:bold; padding:3pt;">{{ ops.parking_children|default:0 }}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- 편익시설 매출 - 헤더 행 -->
+  <tr>
+    <td class="green" colspan="2" rowspan="2">편익시설 매출</td>
+    <td class="green" colspan="2">카페어울림</td>
+    <td class="green" colspan="2">잼잼카페</td>
+    <td class="green" colspan="2">꿈나래마켓</td>
+  </tr>
+  <!-- 편익시설 매출 - 값 행 -->
+  <tr>
+    <td class="r" colspan="2" style="font-size:10pt; font-weight:bold; padding:3pt 8pt;">{{ eoulrim.daily_net_sales|default:0|intcomma }}</td>
+    <td class="r" colspan="2" style="font-size:10pt; font-weight:bold; padding:3pt 8pt;">{{ jamjam.daily_net_sales|default:0|intcomma }}</td>
+    <td class="r" colspan="2" style="font-size:10pt; font-weight:bold; padding:3pt 8pt;">{{ kumnare.sales_amount|default:0|intcomma }}</td>
+  </tr>
+
+  <!-- 내부행사/프로그램 -->
+  <tr>
+    <td colspan="2" style="text-align:center; font-weight:bold; font-size:8pt; padding:2pt 3pt; background:#fff;">내부행사<br>/프로그램</td>
+    <td class="pre" colspan="6" style="min-height:16pt; padding:3pt 5pt;">{{ ops.internal_event|default:"" }}</td>
+  </tr>
+
+  <!-- 외부행사 -->
+  <tr>
+    <td colspan="2" style="text-align:center; font-weight:bold; font-size:8pt; padding:2pt 3pt; background:#fff;">외부행사</td>
+    <td class="pre" colspan="6" style="min-height:16pt; padding:3pt 5pt;">{{ ops.external_event|default:"" }}</td>
+  </tr>
+
+  <!-- 특이사항 + 세부이용현황 -->
+  <tr>
+    <td colspan="2" rowspan="2" style="text-align:center; font-weight:bold; font-size:8pt; vertical-align:top; padding-top:4pt;">특이사항</td>
+    <td class="pre" colspan="6" style="min-height:16pt; padding:3pt 5pt;">{{ ops.special_notes|default:"" }}</td>
+  </tr>
+  <tr>
+    <td colspan="6" style="padding:0;">
+      <div style="padding:2pt 5pt; font-size:8pt; font-weight:bold; border-bottom:0.4pt solid #999;">○ 세부 이용현황</div>
+      <table style="border-collapse:collapse; width:100%; border:none;">
+        <colgroup><col style="width:33.3%"><col style="width:33.3%"><col style="width:33.4%"></colgroup>
+        <tr>
+          <td class="hdr" style="border:none; border-right:0.5pt solid #888; padding:2pt 4pt;">셔틀버스</td>
+          <td class="hdr" style="border:none; border-right:0.5pt solid #888; padding:2pt 4pt;">꿈나래마켓 대여물품</td>
+          <td class="hdr" style="border:none; padding:2pt 4pt;">스탬프 투어</td>
+        </tr>
+        <tr>
+          <td style="border:none; border-right:0.5pt solid #888; border-top:0.5pt solid #888; text-align:center; font-size:11pt; font-weight:bold; padding:3pt;">
+            {{ info.shuttle_total|default:0|intcomma }}명
+          </td>
+          <td style="border:none; border-right:0.5pt solid #888; border-top:0.5pt solid #888; text-align:center; font-size:11pt; font-weight:bold; padding:3pt;">
+            {{ kumnare.rental_total_users|default:0|intcomma }}명
+          </td>
+          <td style="border:none; border-top:0.5pt solid #888; text-align:center; font-size:11pt; font-weight:bold; padding:3pt;">
+            {{ kumnare.stamp_issued|default:0|intcomma }}명
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- 비상연락 -->
+  <tr>
+    <td colspan="2" style="text-align:center; font-weight:bold; font-size:8pt; background:#fff;">비상<br>연락</td>
+    <td class="hdr" style="font-size:7.5pt; padding:2pt 3pt;">운영대행</td>
+    <td colspan="2" style="font-size:7.5pt; padding:3pt 5pt; line-height:1.6;">
+      (총괄) 이정환 팀장 &nbsp; 010-6395-8035<br>
+      (운영) 김인경 과장 &nbsp; 010-2039-0827
+    </td>
+    <td class="hdr" style="font-size:7.5pt; padding:2pt 3pt;">LH</td>
+    <td colspan="2" style="font-size:7.5pt; padding:3pt 5pt; line-height:1.6;">
+      (운영총괄) 이원영 차장 &nbsp; 010-9047-0752<br>
+      (대외협의) 김수민 과장 &nbsp; 010-3928-8627
+    </td>
+  </tr>
+
+</table>
+</body>
+</html>

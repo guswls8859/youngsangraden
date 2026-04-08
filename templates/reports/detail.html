@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}{{ report.report_date }} 업무보고서{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-1"><i class="bi bi-file-text"></i> 일일 업무보고서</h4>
+        <small class="text-muted">{{ report.report_date }} | {{ report.author.get_full_name|default:report.author.username }} ({{ report.author.department }})</small>
+    </div>
+    <div class="d-flex gap-2">
+        {% if report.author == request.user %}
+        <a href="{% url 'reports:edit' report.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-pencil"></i> 수정
+        </a>
+        {% endif %}
+        {% if request.user.role == 'manager' or report.author == request.user %}
+        <a href="{% url 'reports:pdf' report.pk %}" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf"></i> PDF 다운로드
+        </a>
+        {% endif %}
+        <a href="{% url 'reports:list' %}" class="btn btn-outline-primary btn-sm">목록</a>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold">보고 내용</span>
+        {% if report.status == 'submitted' %}
+        <span class="badge bg-success">제출완료</span>
+        {% else %}
+        <span class="badge bg-secondary">임시저장</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+
+        <!-- 완료 업무 -->
+        <div class="mb-4">
+            <h6 class="text-primary mb-2"><i class="bi bi-check2-circle"></i> 금일 완료 업무</h6>
+            {% if completed_tasks %}
+                {% for task in completed_tasks %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small">{{ task.content }}</span>
+                        <span class="badge bg-primary ms-2">{{ task.progress }}%</span>
+                    </div>
+                    <div class="progress" style="height:8px">
+                        <div class="progress-bar bg-primary" role="progressbar"
+                            style="width:{{ task.progress }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted small mb-0">(없음)</p>
+            {% endif %}
+        </div>
+
+        <!-- 진행 중 업무 -->
+        <div class="mb-4">
+            <h6 class="text-warning mb-2"><i class="bi bi-arrow-repeat"></i> 진행 중 업무</h6>
+            {% if in_progress_tasks %}
+                {% for task in in_progress_tasks %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small">{{ task.content }}</span>
+                        <span class="badge bg-warning text-dark ms-2">{{ task.progress }}%</span>
+                    </div>
+                    <div class="progress" style="height:8px">
+                        <div class="progress-bar bg-warning" role="progressbar"
+                            style="width:{{ task.progress }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted small mb-0">(없음)</p>
+            {% endif %}
+        </div>
+
+        <!-- 내일 예정 -->
+        <div class="mb-4">
+            <h6 class="text-info mb-2"><i class="bi bi-calendar2-plus"></i> 내일 예정 업무</h6>
+            {% if tomorrow_tasks %}
+                {% for task in tomorrow_tasks %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small">{{ task.content }}</span>
+                        <span class="badge bg-info text-dark ms-2">{{ task.progress }}%</span>
+                    </div>
+                    <div class="progress" style="height:8px">
+                        <div class="progress-bar bg-info" role="progressbar"
+                            style="width:{{ task.progress }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted small mb-0">(없음)</p>
+            {% endif %}
+        </div>
+
+        <!-- 이슈 -->
+        {% if report.issues %}
+        <div>
+            <h6 class="text-danger mb-2"><i class="bi bi-exclamation-triangle"></i> 이슈 및 특이사항</h6>
+            <div class="bg-light rounded p-3" style="white-space: pre-wrap;">{{ report.issues }}</div>
+        </div>
+        {% endif %}
+
+    </div>
+    <div class="card-footer text-muted small">
+        작성일시: {{ report.created_at|date:"Y-m-d H:i" }} | 최종수정: {{ report.updated_at|date:"Y-m-d H:i" }}
+    </div>
+</div>
+{% endblock %}

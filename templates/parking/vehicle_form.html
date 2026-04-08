@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}{% if object %}차량 수정{% else %}차량 등록{% endif %} - 주차 관리{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">
+        <i class="bi bi-car-front"></i>
+        {% if object %}차량 정보 수정{% else %}차량 등록{% endif %}
+    </h4>
+    <a href="{% if object %}{% url 'parking:detail' object.pk %}{% else %}{% url 'parking:list' %}{% endif %}"
+        class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> 돌아가기
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">{{ form.car_number.label }} <span class="text-danger">*</span></label>
+                    {{ form.car_number }}
+                    {% if form.car_number.errors %}<div class="text-danger small mt-1">{{ form.car_number.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">{{ form.organization.label }} <span class="text-danger">*</span></label>
+                    {{ form.organization }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">{{ form.phone.label }}</label>
+                    {{ form.phone }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">{{ form.start_date.label }} <span class="text-danger">*</span></label>
+                    {{ form.start_date }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">{{ form.end_date.label }} <span class="text-danger">*</span></label>
+                    {{ form.end_date }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold">{{ form.note.label }}</label>
+                    {{ form.note }}
+                </div>
+            </div>
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger mt-3 small">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> {% if object %}저장{% else %}등록{% endif %}
+                </button>
+                <a href="{% if object %}{% url 'parking:detail' object.pk %}{% else %}{% url 'parking:list' %}{% endif %}"
+                    class="btn btn-outline-secondary">취소</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

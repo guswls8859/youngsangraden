@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}꿈나래마켓 보고서 상세 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0"><i class="bi bi-shop"></i> 꿈나래마켓 보고서</h4>
+        <p class="text-muted small mb-0">{{ report.report_date|date:"Y년 m월 d일" }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        {% if can_edit %}
+        <a href="{% url 'facilities:kumnare_edit' report.pk %}" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-pencil"></i> 수정
+        </a>
+        <button type="button" class="btn btn-sm btn-outline-danger"
+                data-bs-toggle="modal" data-bs-target="#deleteModal">
+            <i class="bi bi-trash"></i> 삭제
+        </button>
+        {% endif %}
+        <a href="{% url 'facilities:kumnare' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-list"></i> 목록
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- 매출 -->
+    <div class="col-sm-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1"><i class="bi bi-cash-coin"></i> 매출</div>
+                <div class="fs-4 fw-bold text-danger">{{ report.sales_amount|intcomma }}원</div>
+            </div>
+        </div>
+    </div>
+    <!-- 렌탈 이용객 -->
+    <div class="col-sm-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1"><i class="bi bi-people"></i> 렌탈 총이용객</div>
+                <div class="fs-4 fw-bold text-primary">{{ report.rental_total_users }}명</div>
+            </div>
+        </div>
+    </div>
+    <!-- 스탬프투어 -->
+    <div class="col-sm-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1"><i class="bi bi-stamp"></i> 스탬프투어 지급</div>
+                <div class="fs-4 fw-bold text-success">{{ report.stamp_issued }}개</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 렌탈 품목 -->
+<div class="card shadow-sm">
+    <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-box-seam"></i> 렌탈 대여품목
+    </div>
+    <div class="card-body">
+        {% if rental_items %}
+        <ul class="list-group list-group-flush">
+            {% for item in rental_items %}
+            {% if item.count > 0 %}
+            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                <span>{{ item.item_name }}</span>
+                <span class="badge bg-secondary rounded-pill">{{ item.count }}개</span>
+            </li>
+            {% endif %}
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0">등록된 품목이 없습니다.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="text-muted small mt-3">
+    작성자: {{ report.author.get_full_name|default:report.author.username }} &nbsp;|&nbsp;
+    작성일시: {{ report.created_at|date:"Y.m.d H:i" }}
+    {% if report.updated_at != report.created_at %}
+    &nbsp;|&nbsp; 수정: {{ report.updated_at|date:"Y.m.d H:i" }}
+    {% endif %}
+</div>
+
+{% if can_edit %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle"></i> 보고서 삭제</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {{ report.report_date|date:"Y년 m월 d일" }} 보고서를 삭제하시겠습니까?<br>
+                <span class="text-danger small">삭제된 보고서는 복구할 수 없습니다.</span>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+                <form method="post" action="{% url 'facilities:kumnare_delete' report.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm">삭제</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

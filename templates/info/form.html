@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+{% block title %}{% if object %}보고서 수정{% else %}보고서 작성{% endif %} - 안내센터{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 page-header">
+    <h4 class="mb-0">
+        <i class="bi bi-pencil-square"></i>
+        {% if object %}안내센터 보고서 수정{% else %}안내센터 보고서 작성{% endif %}
+    </h4>
+    <a href="{% url 'info:list' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> 목록
+    </a>
+</div>
+
+<form method="post" id="infoForm">
+    {% csrf_token %}
+
+    <!-- 날짜 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <label class="form-label fw-bold">{{ form.report_date.label }}</label>
+            {{ form.report_date }}
+        </div>
+    </div>
+
+    <!-- 인포메이션 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#e8f5e9; color:#2e7d32">
+            <span class="fw-bold"><i class="bi bi-person-lines-fill"></i> 인포메이션</span>
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="addItem('info')">
+                <i class="bi bi-plus"></i> 항목 추가
+            </button>
+        </div>
+        <div id="section-info">
+            <div id="empty-info" class="text-muted small text-center py-3">업무 항목을 추가하세요</div>
+        </div>
+        <div class="card-footer">
+            <label class="form-label fw-semibold text-danger small mb-1">
+                <i class="bi bi-exclamation-triangle"></i> 특이사항
+            </label>
+            {{ form.info_note }}
+        </div>
+    </div>
+
+    <!-- 셔틀 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#fff3e0; color:#e65100">
+            <span class="fw-bold"><i class="bi bi-bus-front"></i> 셔틀</span>
+            <button type="button" class="btn btn-sm btn-outline-warning" onclick="addItem('shuttle')">
+                <i class="bi bi-plus"></i> 항목 추가
+            </button>
+        </div>
+        <div id="section-shuttle">
+            <div id="empty-shuttle" class="text-muted small text-center py-3">업무 항목을 추가하세요</div>
+        </div>
+        <div class="card-footer">
+            <label class="form-label fw-semibold mb-1">{{ form.shuttle_total.label }}</label>
+            <div class="input-group" style="max-width:180px">
+                {{ form.shuttle_total }}
+                <span class="input-group-text">명</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 순찰 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#e3f2fd; color:#1565c0">
+            <span class="fw-bold"><i class="bi bi-shield-check"></i> 순찰</span>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addItem('patrol')">
+                <i class="bi bi-plus"></i> 항목 추가
+            </button>
+        </div>
+        <div id="section-patrol">
+            <div id="empty-patrol" class="text-muted small text-center py-3">업무 항목을 추가하세요</div>
+        </div>
+        <div class="card-footer">
+            <label class="form-label fw-semibold text-danger small mb-1">
+                <i class="bi bi-exclamation-triangle"></i> 특이사항
+            </label>
+            {{ form.patrol_note }}
+        </div>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-send"></i> 제출
+        </button>
+        <a href="{% url 'info:list' %}" class="btn btn-outline-secondary">취소</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const existingInfo    = {{ existing_info|default:"[]"|safe }};
+const existingShuttle = {{ existing_shuttle|default:"[]"|safe }};
+const existingPatrol  = {{ existing_patrol|default:"[]"|safe }};
+
+const counters = { info: 0, shuttle: 0, patrol: 0 };
+
+function addItem(section, content = '') {
+    const idx = counters[section]++;
+    const sectionEl = document.getElementById('section-' + section);
+    const emptyEl   = document.getElementById('empty-' + section);
+
+    const row = document.createElement('div');
+    row.className = 'item-row border-bottom px-3 py-2 d-flex align-items-center gap-2';
+    row.innerHTML = `
+        <i class="bi bi-dot text-muted flex-shrink-0 fs-5"></i>
+        <input type="text" name="${section}_${idx}_content"
+            class="form-control form-control-sm flex-grow-1"
+            placeholder="업무 내용 입력" value="${escapeHtml(content)}" required>
+        <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0 py-0 px-2"
+            onclick="removeItem(this)">
+            <i class="bi bi-x"></i>
+        </button>
+    `;
+    sectionEl.insertBefore(row, emptyEl);
+    emptyEl.style.display = 'none';
+    updateCount(section);
+}
+
+function removeItem(btn) {
+    const row     = btn.closest('.item-row');
+    const section = row.parentElement;
+    row.remove();
+    const emptyEl = section.querySelector('[id^="empty-"]');
+    if (emptyEl && section.querySelectorAll('.item-row').length === 0) {
+        emptyEl.style.display = '';
+    }
+    const sectionName = section.id.replace('section-', '');
+    updateCount(sectionName);
+}
+
+function updateCount(section) {
+    let input = document.getElementById(`${section}_count`);
+    if (!input) {
+        input = document.createElement('input');
+        input.type = 'hidden';
+        input.id   = `${section}_count`;
+        input.name = `${section}_count`;
+        document.getElementById('infoForm').appendChild(input);
+    }
+    input.value = counters[section];
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    existingInfo.forEach(t    => addItem('info',    t.content));
+    existingShuttle.forEach(t => addItem('shuttle', t.content));
+    existingPatrol.forEach(t  => addItem('patrol',  t.content));
+});
+</script>
+{% endblock %}

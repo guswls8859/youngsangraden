@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}주간 업무 보고 - {{ week_start|date:"Y년 m월 d일" }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 page-header">
+    <h4 class="mb-0"><i class="bi bi-calendar-week"></i> 주간 업무 보고</h4>
+    <a href="{% url 'reports:task_weekly_pdf' %}?week={{ current_week }}"
+       class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-file-earmark-pdf"></i> PDF
+    </a>
+</div>
+
+<!-- 주차 네비게이션 -->
+<div class="card shadow-sm mb-4 nav-date">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="?week={{ prev_week }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> <span class="d-none d-sm-inline">이전 주</span>
+            </a>
+            <div class="text-center d-flex align-items-center gap-3">
+                <span class="fw-bold date-label">
+                    {{ week_start|date:"Y년 m월 d일" }} ~ {{ week_end|date:"m월 d일" }}
+                </span>
+                <form method="get" class="d-inline">
+                    <input type="week" name="week" class="form-control form-control-sm"
+                        style="width:auto" value="{{ current_week }}"
+                        onchange="this.form.submit()">
+                </form>
+            </div>
+            <a href="?week={{ next_week }}" class="btn btn-sm btn-outline-secondary">
+                <span class="d-none d-sm-inline">다음 주</span> <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 날짜별 탭 -->
+{% load i18n %}
+<ul class="nav nav-tabs mb-3" id="weekTabs">
+    {% for day, data in days.items %}
+    <li class="nav-item">
+        <a class="nav-link {% if forloop.first %}active{% endif %}"
+           data-bs-toggle="tab" href="#day-{{ forloop.counter }}">
+            {{ day|date:"m/d (D)" }}
+            {% if data.total > 0 %}
+            <span class="badge bg-primary ms-1">{{ data.total }}</span>
+            {% endif %}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+
+<div class="tab-content">
+    {% for day, data in days.items %}
+    <div class="tab-pane fade {% if forloop.first %}show active{% endif %}" id="day-{{ forloop.counter }}">
+
+        <!-- 요약 -->
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-success py-2">
+                    <div class="fw-bold fs-4 text-success">{{ data.done.count }}</div>
+                    <div class="text-muted small">완료</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-warning py-2">
+                    <div class="fw-bold fs-4 text-warning">{{ data.pending.count }}</div>
+                    <div class="text-muted small">진행 예정</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 완료 업무 -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header fw-bold">
+                <i class="bi bi-check-circle-fill text-success"></i> 완료 업무
+                <span class="badge bg-success ms-1">{{ data.done.count }}</span>
+            </div>
+            {% if data.done %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>업무명</th>
+                            <th>작성자</th>
+                            <th class="d-none d-md-table-cell">부서</th>
+                            <th class="d-none d-lg-table-cell">비고</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in data.done %}
+                        <tr>
+                            <td class="fw-semibold">{{ task.task_name }}</td>
+                            <td>{{ task.user.get_full_name|default:task.user.username }}</td>
+                            <td class="d-none d-md-table-cell text-muted small">{{ task.user.department|default:"-" }}</td>
+                            <td class="d-none d-lg-table-cell small text-muted">{{ task.note|default:"-"|truncatechars:40 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-3">완료된 업무가 없습니다.</div>
+            {% endif %}
+        </div>
+
+        <!-- 익일 예정 업무 -->
+        <div class="card shadow-sm">
+            <div class="card-header fw-bold">
+                <i class="bi bi-arrow-right-circle text-warning"></i> 익일 진행 예정
+                <span class="badge bg-warning text-dark ms-1">{{ data.pending.count }}</span>
+            </div>
+            {% if data.pending %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>업무명</th>
+                            <th>작성자</th>
+                            <th class="d-none d-md-table-cell">부서</th>
+                            <th class="d-none d-sm-table-cell">진행도</th>
+                            <th>상태</th>
+                            <th class="d-none d-lg-table-cell">비고</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in data.pending %}
+                        <tr>
+                            <td class="fw-semibold">{{ task.task_name }}</td>
+                            <td>{{ task.user.get_full_name|default:task.user.username }}</td>
+                            <td class="d-none d-md-table-cell text-muted small">{{ task.user.department|default:"-" }}</td>
+                            <td class="d-none d-sm-table-cell">
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:6px; min-width:50px">
+                                        <div class="progress-bar
+                                            {% if task.progress >= 70 %}bg-success
+                                            {% elif task.progress >= 40 %}bg-warning
+                                            {% else %}bg-danger{% endif %}"
+                                            style="width:{{ task.progress }}%"></div>
+                                    </div>
+                                    <span class="small">{{ task.progress }}%</span>
+                                </div>
+                            </td>
+                            <td>
+                                {% if task.status == 'doing' %}<span class="badge bg-primary">진행중</span>
+                                {% elif task.status == 'hold' %}<span class="badge bg-secondary">보류</span>
+                                {% endif %}
+                            </td>
+                            <td class="d-none d-lg-table-cell small text-muted">{{ task.note|default:"-"|truncatechars:40 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body text-center text-muted py-3">진행 예정 업무가 없습니다.</div>
+            {% endif %}
+        </div>
+
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

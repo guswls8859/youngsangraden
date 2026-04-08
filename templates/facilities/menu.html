@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}편익시설 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h4><i class="bi bi-cup-straw"></i> 편익시설</h4>
+    <p class="text-muted small">관리할 시설을 선택하세요</p>
+</div>
+
+<div class="row g-4 justify-content-center">
+
+    <!-- 꿈나래마켓 -->
+    <div class="col-sm-6 col-lg-4">
+        {% if can_access_kumnare %}
+        <a href="{% url 'facilities:kumnare' %}" class="text-decoration-none">
+            <div class="card shadow-sm h-100 text-center p-4" style="border-radius:1.25rem; transition: transform 0.18s ease, box-shadow 0.18s ease"
+                onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 10px 32px rgba(0,0,0,0.13)'"
+                onmouseout="this.style.transform=''; this.style.boxShadow=''">
+                <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                    style="width:72px; height:72px; background:#fce4ec; color:#c62828; font-size:2rem">
+                    <i class="bi bi-shop"></i>
+                </div>
+                <div class="fw-bold fs-5 mb-1">꿈나래마켓</div>
+                <div class="text-muted small">꿈나래마켓 운영 관리</div>
+                <div class="mt-2">
+                    <span class="badge bg-danger" style="font-size:0.72rem">
+                        <i class="bi bi-arrow-right-circle"></i> 입장하기
+                    </span>
+                </div>
+            </div>
+        </a>
+        {% else %}
+        <div class="card shadow-sm h-100 text-center p-4" style="border-radius:1.25rem; opacity:0.45; cursor:not-allowed">
+            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                style="width:72px; height:72px; background:#fce4ec; color:#c62828; font-size:2rem">
+                <i class="bi bi-shop"></i>
+            </div>
+            <div class="fw-bold fs-5 mb-1">꿈나래마켓</div>
+            <div class="text-muted small">꿈나래마켓 운영 관리</div>
+            <div class="mt-2"><span class="badge bg-secondary" style="font-size:0.72rem">접근 권한 없음</span></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 카페 어울림 -->
+    <div class="col-sm-6 col-lg-4">
+        {% if can_access_eoulrim %}
+        <a href="{% url 'facilities:eoulrim' %}" class="text-decoration-none">
+            <div class="card shadow-sm h-100 text-center p-4" style="border-radius:1.25rem; transition: transform 0.18s ease, box-shadow 0.18s ease"
+                onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 10px 32px rgba(0,0,0,0.13)'"
+                onmouseout="this.style.transform=''; this.style.boxShadow=''">
+                <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                    style="width:72px; height:72px; background:#e8f5e9; color:#2e7d32; font-size:2rem">
+                    <i class="bi bi-cup-hot"></i>
+                </div>
+                <div class="fw-bold fs-5 mb-1">카페 어울림</div>
+                <div class="text-muted small">카페 어울림 운영 관리</div>
+                <div class="mt-2">
+                    <span class="badge bg-success" style="font-size:0.72rem">
+                        <i class="bi bi-arrow-right-circle"></i> 입장하기
+                    </span>
+                </div>
+            </div>
+        </a>
+        {% else %}
+        <div class="card shadow-sm h-100 text-center p-4" style="border-radius:1.25rem; opacity:0.45; cursor:not-allowed">
+            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                style="width:72px; height:72px; background:#e8f5e9; color:#2e7d32; font-size:2rem">
+                <i class="bi bi-cup-hot"></i>
+            </div>
+            <div class="fw-bold fs-5 mb-1">카페 어울림</div>
+            <div class="text-muted small">카페 어울림 운영 관리</div>
+            <div class="mt-2"><span class="badge bg-secondary" style="font-size:0.72rem">접근 권한 없음</span></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 잼잼 카페 -->
+    <div class="col-sm-6 col-lg-4">
+        {% if can_access_jamjam %}
+        <a href="{% url 'facilities:jamjam' %}" class="text-decoration-none">
+            <div class="card shadow-sm h-100 text-center p-4" style="border-radius:1.25rem; transition: transform 0.18s ease, box-shadow 0.18s ease"
+                onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 10px 32px rgba(0,0,0,0.13)'"
+                onmouseout="this.style.transform=''; this.style.boxShadow=''">
+                <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                    style="width:72px; height:72px; background:#e3f2fd; color:#1565c0; font-size:2rem">
+                    <i class="bi bi-cup-straw"></i>
+                </div>
+                <div class="fw-bold fs-5 mb-1">잼잼 카페</div>
+                <div class="text-muted small">잼잼 카페 운영 관리</div>
+                <div class="mt-2">
+                    <span class="badge bg-primary" style="font-size:0.72rem">
+                        <i class="bi bi-arrow-right-circle"></i> 입장하기
+                    </span>
+                </div>
+            </div>
+        </a>
+        {% else %}
+        <div class="card shadow-sm h-100 text-center p-4" style="border-radius:1.25rem; opacity:0.45; cursor:not-allowed">
+            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                style="width:72px; height:72px; background:#e3f2fd; color:#1565c0; font-size:2rem">
+                <i class="bi bi-cup-straw"></i>
+            </div>
+            <div class="fw-bold fs-5 mb-1">잼잼 카페</div>
+            <div class="text-muted small">잼잼 카페 운영 관리</div>
+            <div class="mt-2"><span class="badge bg-secondary" style="font-size:0.72rem">접근 권한 없음</span></div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

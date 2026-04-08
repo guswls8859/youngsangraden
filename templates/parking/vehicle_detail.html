@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% block title %}{{ vehicle.car_number }} - 주차 관리{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-car-front"></i> 차량 상세</h4>
+    <div class="d-flex gap-2">
+        <a href="{% url 'parking:edit' vehicle.pk %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-pencil"></i> 수정
+        </a>
+        <a href="{% url 'parking:list' %}" class="btn btn-sm btn-outline-primary">목록</a>
+    </div>
+</div>
+
+<!-- 차량 정보 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span>차량 정보</span>
+        {% if vehicle.is_active %}
+        <span class="badge bg-success">출입 가능</span>
+        {% else %}
+        <span class="badge bg-secondary">기간 만료</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="text-muted small">차량 번호</div>
+                <div class="fw-bold fs-5">{{ vehicle.car_number }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">소속</div>
+                <div class="fw-semibold">{{ vehicle.organization }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">핸드폰</div>
+                <div>{{ vehicle.phone|default:"-" }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">출입 기간</div>
+                <div>{{ vehicle.start_date }} ~ {{ vehicle.end_date }}</div>
+            </div>
+            {% if vehicle.note %}
+            <div class="col-12">
+                <div class="text-muted small">비고</div>
+                <div class="bg-light rounded p-2 small" style="white-space:pre-wrap">{{ vehicle.note }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-footer text-muted small">
+        등록자: {{ vehicle.registered_by.get_full_name|default:vehicle.registered_by.username|default:"-" }}
+        &nbsp;|&nbsp; 등록일: {{ vehicle.created_at|date:"Y-m-d H:i" }}
+    </div>
+</div>
+
+<!-- 오늘 입출차 컨트롤 -->
+{% if vehicle.is_active %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-bold">
+        <i class="bi bi-activity"></i> 오늘 입출차 현황
+        <span class="text-muted fw-normal small ms-2">{{ today }}</span>
+    </div>
+    <div class="card-body">
+        {% if today_log %}
+            <div class="d-flex align-items-center gap-4 flex-wrap">
+                <!-- 상태 표시 -->
+                <div class="text-center">
+                    {% if today_log.status == 'waiting' %}
+                    <div class="display-6 text-warning"><i class="bi bi-clock"></i></div>
+                    <div class="fw-bold text-warning">대기중</div>
+                    {% elif today_log.status == 'entered' %}
+                    <div class="display-6 text-success"><i class="bi bi-box-arrow-in-right"></i></div>
+                    <div class="fw-bold text-success">입차 완료</div>
+                    <div class="text-muted small">{{ today_log.entered_at|date:"H:i" }}</div>
+                    {% elif today_log.status == 'exited' %}
+                    <div class="display-6 text-secondary"><i class="bi bi-box-arrow-right"></i></div>
+                    <div class="fw-bold text-secondary">출차 완료</div>
+                    <div class="text-muted small">
+                        입차 {{ today_log.entered_at|date:"H:i" }} &rarr; 출차 {{ today_log.exited_at|date:"H:i" }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- 버튼 -->
+                <div class="d-flex gap-2 flex-wrap">
+                    {% if today_log.status == 'waiting' %}
+                    <form method="post" action="{% url 'parking:action' vehicle.pk 'enter' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success btn-lg px-4">
+                            <i class="bi bi-box-arrow-in-right"></i> 입차
+                        </button>
+                    </form>
+                    {% elif today_log.status == 'entered' %}
+                    <form method="post" action="{% url 'parking:action' vehicle.pk 'exit' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-secondary btn-lg px-4">
+                            <i class="bi bi-box-arrow-right"></i> 출차
+                        </button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'parking:action' vehicle.pk 'reset' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger btn-sm"
+                            onclick="return confirm('오늘 입출차 기록을 초기화할까요?')">
+                            <i class="bi bi-arrow-counterclockwise"></i> 초기화
+                        </button>
+                    </form>
+                </div>
+                {% if today_log.updated_by %}
+                <div class="text-muted small ms-auto">
+                    처리자: {{ today_log.updated_by.get_full_name|default:today_log.updated_by.username }}
+                </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="d-flex align-items-center gap-4">
+                <div class="text-center">
+                    <div class="display-6 text-warning"><i class="bi bi-clock"></i></div>
+                    <div class="fw-bold text-warning">대기중</div>
+                </div>
+                <form method="post" action="{% url 'parking:action' vehicle.pk 'enter' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success btn-lg px-4">
+                        <i class="bi bi-box-arrow-in-right"></i> 입차
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 입출차 이력 -->
+<div class="card shadow-sm">
+    <div class="card-header fw-bold"><i class="bi bi-clock-history"></i> 입출차 이력</div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>날짜</th>
+                    <th>상태</th>
+                    <th class="d-none d-sm-table-cell">입차 시각</th>
+                    <th class="d-none d-sm-table-cell">출차 시각</th>
+                    <th class="d-none d-md-table-cell">처리자</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.date }}</td>
+                    <td>
+                        {% if log.status == 'entered' %}<span class="badge bg-success">입차</span>
+                        {% elif log.status == 'exited' %}<span class="badge bg-secondary">출차</span>
+                        {% else %}<span class="badge bg-warning text-dark">대기중</span>
+                        {% endif %}
+                    </td>
+                    <td class="d-none d-sm-table-cell small">{{ log.entered_at|date:"H:i"|default:"-" }}</td>
+                    <td class="d-none d-sm-table-cell small">{{ log.exited_at|date:"H:i"|default:"-" }}</td>
+                    <td class="d-none d-md-table-cell small text-muted">{{ log.updated_by.get_full_name|default:log.updated_by.username|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-3">입출차 이력이 없습니다.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 삭제 -->
+<div class="mt-3 text-end">
+    <button type="button" class="btn btn-sm btn-outline-danger"
+        onclick="document.getElementById('deleteForm').submit()">
+        <i class="bi bi-trash"></i> 차량 삭제
+    </button>
+    <form id="deleteForm" method="post" action="{% url 'parking:delete' vehicle.pk %}" class="d-none">
+        {% csrf_token %}
+    </form>
+</div>
+{% endblock %}

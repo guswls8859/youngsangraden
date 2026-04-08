@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}꿈나래마켓 보고서 작성 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-0"><i class="bi bi-shop"></i>
+            {% if form.instance.pk %}보고서 수정{% else %}보고서 작성{% endif %}
+        </h4>
+        <p class="text-muted small mb-0">꿈나래마켓 일일 보고서</p>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="history.back()">
+        <i class="bi bi-arrow-left"></i> 이전
+    </button>
+</div>
+
+<form method="post" id="reportForm">
+    {% csrf_token %}
+
+    <!-- 날짜 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <label class="form-label fw-semibold">보고 날짜</label>
+            {{ form.report_date }}
+            {% if form.report_date.errors %}
+            <div class="text-danger small">{{ form.report_date.errors }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 매출 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-cash-coin"></i> 매출</div>
+        <div class="card-body">
+            <label class="form-label">매출액 (원)</label>
+            {{ form.sales_amount }}
+        </div>
+    </div>
+
+    <!-- 렌탈 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-box-seam"></i> 렌탈</div>
+        <div class="card-body">
+            <div class="row g-2 mb-4">
+                <div class="col-sm-6">
+                    <label class="form-label">총이용객 (명)</label>
+                    {{ form.rental_total_users }}
+                </div>
+            </div>
+
+            <label class="form-label fw-semibold">대여품목</label>
+
+            <!-- 고정 품목 4개 (수량은 JS로 채움) -->
+            <div class="mb-3" id="fixedItemList">
+                {% for item_name in fixed_item_names %}
+                <div class="row g-2 align-items-center mb-2">
+                    <div class="col">
+                        <div class="form-control form-control-sm bg-light text-muted">{{ item_name }}</div>
+                    </div>
+                    <div class="col-auto" style="width:110px">
+                        <div class="input-group input-group-sm">
+                            <input type="number" class="form-control form-control-sm"
+                                   name="fixed_{{ item_name }}_count"
+                                   id="fixed_{{ item_name }}_count"
+                                   min="0" value="0">
+                            <span class="input-group-text">개</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- 추가 품목 (동적) -->
+            <label class="form-label fw-semibold text-muted small">추가 품목</label>
+            <div id="extraItemList" class="mb-2"></div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addExtraItem()">
+                <i class="bi bi-plus-circle"></i> 품목 추가
+            </button>
+            <input type="hidden" id="extra_item_count" name="extra_item_count" value="0">
+        </div>
+    </div>
+
+    <!-- 스탬프투어 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-stamp"></i> 스탬프투어</div>
+        <div class="card-body">
+            <label class="form-label">지급 (개)</label>
+            {{ form.stamp_issued }}
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end">
+        <a href="{% url 'facilities:kumnare' %}" class="btn btn-outline-secondary">취소</a>
+        <button type="submit" class="btn btn-danger">
+            <i class="bi bi-check2-circle"></i> 저장
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 고정 품목 수량 초기값 (수정 시)
+const fixedCounts = {{ fixed_counts_json|default:"{}" }};
+const fixedNames  = {{ fixed_names_json }};
+
+// 고정 품목 수량 채우기 (수정 시)
+fixedNames.forEach(name => {
+    const input = document.getElementById(`fixed_${name}_count`);
+    if (input && fixedCounts[name] !== undefined) {
+        input.value = fixedCounts[name];
+    }
+});
+
+// 추가 품목
+let extraCount = 0;
+
+function addExtraItem(name='', count='') {
+    const idx = extraCount;
+    const div = document.createElement('div');
+    div.className = 'row g-2 align-items-center mb-2 extra-item';
+    div.innerHTML = `
+        <div class="col">
+            <input type="text" class="form-control form-control-sm"
+                   name="extra_item_${idx}_name"
+                   placeholder="품목명" value="${name}">
+        </div>
+        <div class="col-auto" style="width:110px">
+            <div class="input-group input-group-sm">
+                <input type="number" class="form-control form-control-sm"
+                       name="extra_item_${idx}_count"
+                       placeholder="0" min="0" value="${count}">
+                <span class="input-group-text">개</span>
+            </div>
+        </div>
+        <div class="col-auto">
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeExtraItem(this)">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>`;
+    document.getElementById('extraItemList').appendChild(div);
+    extraCount++;
+    updateExtraCount();
+}
+
+function removeExtraItem(btn) {
+    btn.closest('.extra-item').remove();
+    reindexExtraItems();
+}
+
+function reindexExtraItems() {
+    document.querySelectorAll('.extra-item').forEach((item, i) => {
+        item.querySelectorAll('input[name]').forEach(input => {
+            input.name = input.name.replace(/extra_item_\d+_/, `extra_item_${i}_`);
+        });
+    });
+    extraCount = document.querySelectorAll('.extra-item').length;
+    updateExtraCount();
+}
+
+function updateExtraCount() {
+    document.getElementById('extra_item_count').value =
+        document.querySelectorAll('.extra-item').length;
+}
+
+// 수정 시 기존 추가 품목 로드
+const existingExtra = {{ extra_items_json|default:"[]" }};
+existingExtra.forEach(item => addExtraItem(item.item_name, item.count));
+</script>
+{% endblock %}

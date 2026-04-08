@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% block title %}용산어린이정원 일일보고 - {{ target_date }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-file-earmark-text"></i> 용산어린이정원 일일보고</h4>
+    <div class="d-flex gap-2">
+        <!-- <a href="{% url 'reports:integrated_daily_pdf' %}?date={{ target_date|date:'Y-m-d' }}"
+           class="btn btn-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf"></i> PDF 출력
+        </a> -->
+        <a href="{% url 'reports:integrated_daily_hwp' %}?date={{ target_date|date:'Y-m-d' }}"
+           class="btn btn-outline-success btn-sm">
+            <i class="bi bi-file-earmark-word"></i> 한글(다운)
+        </a>
+    </div>
+</div>
+
+<!-- 날짜 네비게이션 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="?date={{ prev_date|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> 전날
+            </a>
+            <div class="text-center d-flex align-items-center gap-3">
+                <span class="fw-bold">{{ target_date|date:"Y년 m월 d일 (D)" }}</span>
+                <form method="get" class="d-inline">
+                    <input type="date" name="date" class="form-control form-control-sm"
+                           style="width:auto" value="{{ target_date|date:'Y-m-d' }}"
+                           onchange="this.form.submit()">
+                </form>
+            </div>
+            <a href="?date={{ next_date|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+                다음날 <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<form method="post" action="?date={{ target_date|date:'Y-m-d' }}">
+    {% csrf_token %}
+    <input type="hidden" name="date" value="{{ target_date|date:'Y-m-d' }}">
+
+    <div class="row g-3">
+
+        <!-- 좌측 컬럼 -->
+        <div class="col-lg-6">
+
+            <!-- 금일 방문현황 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-people"></i> 금일 방문현황
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="form-label small fw-medium">입장 총수 (명)</label>
+                        <input type="number" name="today_total" class="form-control form-control-sm"
+                               min="0" value="{{ ops.today_total|default:0 }}">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label small fw-medium">주출입구 도보</label>
+                            <input type="number" name="main_gate_walk" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.main_gate_walk|default:0 }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-medium">부출입구 도보</label>
+                            <input type="number" name="sub_gate_walk" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.sub_gate_walk|default:0 }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-medium">차량방문</label>
+                            <input type="number" name="car_visit" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.car_visit|default:0 }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 전일 방문현황 + 기상 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-cloud-sun"></i> 전일 방문현황 / 명일 기상상황
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="form-label small fw-medium">전일 입장 총수 (명)</label>
+                        <input type="number" name="yesterday_total" class="form-control form-control-sm"
+                               min="0" value="{{ ops.yesterday_total|default:0 }}">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label small fw-medium">기온 최저 (°)</label>
+                            <input type="number" name="tomorrow_temp_min" class="form-control form-control-sm"
+                                   value="{{ ops.tomorrow_temp_min|default:0 }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-medium">기온 최고 (°)</label>
+                            <input type="number" name="tomorrow_temp_max" class="form-control form-control-sm"
+                                   value="{{ ops.tomorrow_temp_max|default:0 }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-medium">강수확률 (%)</label>
+                            <input type="number" name="tomorrow_rain_pct" class="form-control form-control-sm"
+                                   min="0" max="100" value="{{ ops.tomorrow_rain_pct|default:0 }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 주차장 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-p-circle"></i> 주차장 (대수)
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-3">
+                            <label class="form-label small fw-medium">다둥이</label>
+                            <input type="number" name="parking_family" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.parking_family|default:0 }}">
+                        </div>
+                        <div class="col-3">
+                            <label class="form-label small fw-medium">장애인</label>
+                            <input type="number" name="parking_disabled" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.parking_disabled|default:0 }}">
+                        </div>
+                        <div class="col-3">
+                            <label class="form-label small fw-medium">임산부</label>
+                            <input type="number" name="parking_pregnant" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.parking_pregnant|default:0 }}">
+                        </div>
+                        <div class="col-3">
+                            <label class="form-label small fw-medium">어린이단체</label>
+                            <input type="number" name="parking_children" class="form-control form-control-sm"
+                                   min="0" value="{{ ops.parking_children|default:0 }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 우측 컬럼 -->
+        <div class="col-lg-6">
+
+            <!-- 운영관리 점검 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-clipboard-check"></i> 운영관리 점검 및 작업내용
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="form-label small fw-medium">내부시설 (용산서가, 전시관 등)</label>
+                        <textarea name="facility_interior" class="form-control form-control-sm" rows="2"
+                                  placeholder="점검 및 작업 내용">{{ ops.facility_interior|default:'' }}</textarea>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-medium">잔디마당 · 가로수길 · 전망언덕</label>
+                        <textarea name="facility_outdoor" class="form-control form-control-sm" rows="2"
+                                  placeholder="점검 및 작업 내용">{{ ops.facility_outdoor|default:'' }}</textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small fw-medium">분수정원 · 잼잼카페</label>
+                        <textarea name="facility_fountain" class="form-control form-control-sm" rows="2"
+                                  placeholder="점검 및 작업 내용">{{ ops.facility_fountain|default:'' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 행사 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-calendar-event"></i> 행사
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="form-label small fw-medium">내부행사 / 프로그램</label>
+                        <textarea name="internal_event" class="form-control form-control-sm" rows="2"
+                                  placeholder="내용 입력">{{ ops.internal_event|default:'' }}</textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small fw-medium">외부행사</label>
+                        <textarea name="external_event" class="form-control form-control-sm" rows="2"
+                                  placeholder="내용 입력">{{ ops.external_event|default:'' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 특이사항 -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-exclamation-circle"></i> 특이사항
+                </div>
+                <div class="card-body">
+                    <textarea name="special_notes" class="form-control form-control-sm" rows="3"
+                              placeholder="특이사항 입력">{{ ops.special_notes|default:'' }}</textarea>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 자동 수집 안내 -->
+    <div class="alert alert-light border small mb-3">
+        <i class="bi bi-info-circle text-primary"></i>
+        <strong>자동 수집 항목</strong> — 스포츠필드 예약 현황, 편익시설 매출(카페어울림·잼잼카페·꿈나래마켓), 셔틀버스·대여물품·스탬프투어는 각 항목에 해당 날짜 데이터는 자동으로 반영합니다.
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end">
+        <a href="{% url 'reports:task_report' %}?date={{ target_date|date:'Y-m-d' }}" class="btn btn-outline-secondary">취소</a>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2-circle"></i> 저장
+        </button>
+        <!-- <a href="{% url 'reports:integrated_daily_pdf' %}?date={{ target_date|date:'Y-m-d' }}"
+           class="btn btn-danger">
+            <i class="bi bi-file-earmark-pdf"></i> PDF 출력
+        </a> -->
+        <a href="{% url 'reports:integrated_daily_hwp' %}?date={{ target_date|date:'Y-m-d' }}"
+           class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-word"></i> 한글(다운)
+        </a>
+    </div>
+</form>
+{% endblock %}

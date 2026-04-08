@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+{% block title %}일간 보고 현황 - {{ target_date }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-bar-chart-line"></i> 일간 업무 현황</h4>
+    <div class="d-flex gap-2">
+        {% if reports %}
+        <a href="{% url 'reports:daily_pdf' target_date|date:'Y-m-d' %}" class="btn btn-sm btn-danger">
+            <i class="bi bi-file-earmark-pdf"></i> 일간 PDF 전체 다운로드
+        </a>
+        {% endif %}
+        <a href="{% url 'reports:dashboard_weekly' %}?week={{ target_date|date:'Y-W' }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-calendar3-week"></i> 주간 보기
+        </a>
+    </div>
+</div>
+
+<!-- 날짜 네비게이션 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="?date={{ prev_date|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> 전날
+            </a>
+            <div class="text-center">
+                <span class="fw-bold fs-5">{{ target_date|date:"Y년 m월 d일 (D)" }}</span>
+                <form class="d-inline ms-3" method="get">
+                    <input type="date" name="date" class="form-control form-control-sm d-inline-block"
+                        style="width:auto" value="{{ target_date|date:'Y-m-d' }}"
+                        onchange="this.form.submit()">
+                </form>
+            </div>
+            <a href="?date={{ next_date|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+                다음날 <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if reports %}
+    <!-- 요약 통계 -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center">
+                <div class="card-body py-3">
+                    <div class="fs-3 fw-bold text-primary">{{ reports.count }}</div>
+                    <div class="text-muted small">제출 인원</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center">
+                <div class="card-body py-3">
+                    {% with total=0 %}
+                    <div class="fs-3 fw-bold text-success">
+                        {% for r in reports %}{{ r.task_items.all.count }}{% if not forloop.last %}+{% endif %}{% endfor %}
+                    </div>
+                    {% endwith %}
+                    <div class="text-muted small">총 업무 항목</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center">
+                <div class="card-body py-3">
+                    <div class="fs-3 fw-bold text-warning">
+                        {% for r in reports %}{% if r.status == 'submitted' %}✓ {% endif %}{% endfor %}
+                    </div>
+                    <div class="text-muted small">제출완료 / 임시저장</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 직원별 보고서 -->
+    {% for report in reports %}
+    <div class="card shadow-sm mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <span class="fw-bold">{{ report.author.get_full_name|default:report.author.username }}</span>
+                <span class="text-muted ms-2 small">{{ report.author.department }}</span>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                {% if report.status == 'submitted' %}
+                <span class="badge bg-success">제출완료</span>
+                {% else %}
+                <span class="badge bg-secondary">임시저장</span>
+                {% endif %}
+                <a href="{% url 'reports:detail' report.pk %}" class="btn btn-sm btn-outline-primary">보기</a>
+                <a href="{% url 'reports:pdf' report.pk %}" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                {% with completed=report.task_items.all %}
+                <!-- 완료 -->
+                <div class="col-md-4">
+                    <h6 class="text-primary small fw-bold"><i class="bi bi-check2-circle"></i> 완료</h6>
+                    {% for task in report.task_items.all %}
+                        {% if task.category == 'completed' %}
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="small text-truncate" style="max-width:160px" title="{{ task.content }}">{{ task.content }}</span>
+                                <span class="badge bg-primary ms-1">{{ task.progress }}%</span>
+                            </div>
+                            <div class="progress" style="height:5px">
+                                <div class="progress-bar bg-primary" style="width:{{ task.progress }}%"></div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% empty %}
+                        <p class="text-muted small">(없음)</p>
+                    {% endfor %}
+                </div>
+                <!-- 진행중 -->
+                <div class="col-md-4">
+                    <h6 class="text-warning small fw-bold"><i class="bi bi-arrow-repeat"></i> 진행중</h6>
+                    {% for task in report.task_items.all %}
+                        {% if task.category == 'in_progress' %}
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="small text-truncate" style="max-width:160px" title="{{ task.content }}">{{ task.content }}</span>
+                                <span class="badge bg-warning text-dark ms-1">{{ task.progress }}%</span>
+                            </div>
+                            <div class="progress" style="height:5px">
+                                <div class="progress-bar bg-warning" style="width:{{ task.progress }}%"></div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    {% with found=False %}{% endwith %}
+                </div>
+                <!-- 예정 -->
+                <div class="col-md-4">
+                    <h6 class="text-info small fw-bold"><i class="bi bi-calendar2-plus"></i> 내일 예정</h6>
+                    {% for task in report.task_items.all %}
+                        {% if task.category == 'tomorrow' %}
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="small text-truncate" style="max-width:160px" title="{{ task.content }}">{{ task.content }}</span>
+                                <span class="badge bg-info text-dark ms-1">{{ task.progress }}%</span>
+                            </div>
+                            <div class="progress" style="height:5px">
+                                <div class="progress-bar bg-info" style="width:{{ task.progress }}%"></div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endwith %}
+            </div>
+            {% if report.issues %}
+            <div class="mt-2 pt-2 border-top">
+                <span class="text-danger small fw-bold"><i class="bi bi-exclamation-triangle"></i> 이슈: </span>
+                <span class="small">{{ report.issues|truncatechars:120 }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+{% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center text-muted py-5">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            {{ target_date|date:"Y년 m월 d일" }}에 제출된 보고서가 없습니다.
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

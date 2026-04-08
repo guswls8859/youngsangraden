@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% block title %}안내센터 보고서 - {{ report.report_date }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 page-header">
+    <h4 class="mb-0"><i class="bi bi-info-circle"></i> 안내센터 보고서</h4>
+    <div class="d-flex gap-2">
+        {% if can_edit %}
+        <a href="{% url 'info:edit' report.pk %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-pencil"></i> 수정
+        </a>
+        <button type="button" class="btn btn-sm btn-outline-danger"
+                data-bs-toggle="modal" data-bs-target="#deleteModal">
+            <i class="bi bi-trash"></i> 삭제
+        </button>
+        {% endif %}
+        <a href="{% url 'info:list' %}" class="btn btn-sm btn-outline-primary">목록</a>
+    </div>
+</div>
+
+<!-- 헤더 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-6 col-md-3">
+                <div class="text-muted small">보고 날짜</div>
+                <div class="fw-bold">{{ report.report_date }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="text-muted small">작성자</div>
+                <div class="fw-semibold">{{ report.author.get_full_name|default:report.author.username }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="text-muted small">상태</div>
+                {% if report.status == 'submitted' %}
+                <span class="badge bg-success">제출완료</span>
+                {% else %}
+                <span class="badge bg-secondary">임시저장</span>
+                {% endif %}
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="text-muted small">작성일시</div>
+                <div class="small">{{ report.created_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 인포메이션 -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold" style="background:#e8f5e9; color:#2e7d32">
+        <i class="bi bi-person-lines-fill"></i> 인포메이션
+    </div>
+    <div class="list-group list-group-flush">
+        {% for item in info_items %}
+        <div class="list-group-item">
+            <i class="bi bi-dot text-muted"></i> {{ item.content }}
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted small">(내용 없음)</div>
+        {% endfor %}
+    </div>
+    {% if report.info_note %}
+    <div class="card-footer small">
+        <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle"></i> 특이사항</span>
+        <div class="mt-1" style="white-space:pre-wrap">{{ report.info_note }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 셔틀 -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center" style="background:#fff3e0; color:#e65100">
+        <span><i class="bi bi-bus-front"></i> 셔틀</span>
+        <span class="badge bg-warning text-dark fs-6">총원 {{ report.shuttle_total }}명</span>
+    </div>
+    <div class="list-group list-group-flush">
+        {% for item in shuttle_items %}
+        <div class="list-group-item">
+            <i class="bi bi-dot text-muted"></i> {{ item.content }}
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted small">(내용 없음)</div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 순찰 -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold" style="background:#e3f2fd; color:#1565c0">
+        <i class="bi bi-shield-check"></i> 순찰
+    </div>
+    <div class="list-group list-group-flush">
+        {% for item in patrol_items %}
+        <div class="list-group-item">
+            <i class="bi bi-dot text-muted"></i> {{ item.content }}
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted small">(내용 없음)</div>
+        {% endfor %}
+    </div>
+    {% if report.patrol_note %}
+    <div class="card-footer small">
+        <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle"></i> 특이사항</span>
+        <div class="mt-1" style="white-space:pre-wrap">{{ report.patrol_note }}</div>
+    </div>
+    {% endif %}
+</div>
+
+{% if can_edit %}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle"></i> 보고서 삭제</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {{ report.report_date|date:"Y년 m월 d일" }} 보고서를 삭제하시겠습니까?<br>
+                <span class="text-danger small">삭제된 보고서는 복구할 수 없습니다.</span>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+                <form method="post" action="{% url 'info:delete' report.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm">삭제</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

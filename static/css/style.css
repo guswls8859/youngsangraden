@@ -1,0 +1,139 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-size: 1.1rem;
+}
+
+.card {
+    border: none;
+    border-radius: 0.75rem;
+}
+
+.table th {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+/* ── 모바일 최적화 ────────────────────────────────────────── */
+@media (max-width: 767.98px) {
+
+    /* 공통 컨테이너 여백 축소 */
+    main.container {
+        padding-top: 0.75rem !important;
+        padding-bottom: 0.75rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    /* 페이지 헤더 (제목 + 버튼) */
+    .page-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .page-header h4 {
+        font-size: 1rem;
+    }
+
+    /* 테이블 */
+    .table th,
+    .table td {
+        font-size: 0.78rem;
+        padding: 0.35rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    /* 날짜/주간 네비게이션 */
+    .nav-date .date-label {
+        font-size: 0.88rem !important;
+    }
+    .nav-date .d-flex.align-items-center.gap-3 {
+        gap: 0.4rem !important;
+    }
+    .nav-date input[type="date"],
+    .nav-date input[type="week"] {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.3rem;
+    }
+
+    /* 주간 탭 스크롤 */
+    .nav-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .nav-tabs::-webkit-scrollbar { display: none; }
+    .nav-tabs .nav-link {
+        white-space: nowrap;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.82rem;
+    }
+
+    /* 카드 헤더 */
+    .card-header {
+        font-size: 0.88rem;
+        padding: 0.6rem 0.85rem;
+    }
+
+    /* 대형 버튼 */
+    .btn-lg {
+        font-size: 0.9rem;
+        padding: 0.45rem 1.1rem;
+    }
+    .btn-sm {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+    }
+
+    /* 네브바 브랜드 텍스트 축약 */
+    .navbar-brand .brand-text {
+        display: none;
+    }
+
+    /* 요약 통계 카드 */
+    .summary-stat .fs-2 {
+        font-size: 1.4rem !important;
+    }
+}
+
+@media (max-width: 575.98px) {
+
+    /* 업무 목록 - 업무명 + 버튼 줄바꿈 허용 */
+    .task-header-row {
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+    .task-header-row .task-name {
+        flex: 1 1 100%;
+    }
+    .task-header-row .task-actions {
+        margin-left: auto;
+    }
+
+    /* 차량 상세 - 입출차 버튼 영역 */
+    .parking-action-area {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.75rem !important;
+    }
+
+    /* 메인 메뉴 카드 */
+    .menu-card {
+        padding: 20px 16px !important;
+    }
+    .menu-icon {
+        width: 52px !important;
+        height: 52px !important;
+        font-size: 1.4rem !important;
+        margin-bottom: 10px !important;
+    }
+    .menu-title {
+        font-size: 1rem !important;
+    }
+}

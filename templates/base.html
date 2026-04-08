@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}용산어린이정원 업무보고 시스템{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% load static %}{% static 'css/style.css' %}">
+</head>
+<body>
+{% if user.is_authenticated %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="{% url 'reports:task_list' %}">
+            <i class="bi bi-clipboard2-check"></i><span class="brand-text"> 용산어린이정원 업무보고</span>
+        </a>
+        <a href="{% url 'main_menu' %}" class="btn btn-sm btn-outline-light me-2">
+            <i class="bi bi-grid-3x3-gap"></i> 메뉴
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                {% if user.organization == 'operations' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'reports:task_list' %}"><i class="bi bi-check2-square"></i> 업무 목록</a>
+                </li>
+                {% if user.role == 'manager' %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                        <i class="bi bi-speedometer2"></i> 관리자
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'reports:task_report' %}">
+                            <i class="bi bi-clipboard2-data"></i> 일일 업무 보고
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'reports:task_weekly_report' %}">
+                            <i class="bi bi-calendar-week"></i> 주간 업무 보고
+                        </a></li>
+                        {% if user.username == 'admin' %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'accounts:admin_user_list' %}">
+                            <i class="bi bi-people"></i> 사용자 관리
+                        </a></li>
+                        {% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+                {% elif user.organization == 'info' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'info:list' %}"><i class="bi bi-info-circle"></i> 안내센터 보고서</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'sportsfield:main' %}"><i class="bi bi-dribbble"></i> 스포츠필드</a>
+                </li>
+                {% elif user.organization == 'sportsfield' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'sportsfield:main' %}"><i class="bi bi-dribbble"></i> 스포츠필드</a>
+                </li>
+                {% elif user.organization == 'parking' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'parking:list' %}"><i class="bi bi-p-circle"></i> 주차 관리</a>
+                </li>
+                {% elif user.organization == 'dreammarket' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'facilities:kumnare' %}"><i class="bi bi-shop"></i> 꿈나래마켓</a>
+                </li>
+                {% elif user.organization == 'eulrimcafe' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'facilities:eoulrim' %}"><i class="bi bi-cup-hot"></i> 카페 어울림</a>
+                </li>
+                {% elif user.organization == 'jemjemcafe' %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'facilities:jamjam' %}"><i class="bi bi-cup-straw"></i> 잼잼 카페</a>
+                </li>
+                {% endif %}
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i> {{ user.get_full_name|default:user.username }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><span class="dropdown-item-text text-muted small">{{ user.department }}</span></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'accounts:logout' %}"><i class="bi bi-box-arrow-right"></i> 로그아웃</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+{% endif %}
+
+<main class="container py-4">
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    {% endif %}
+    {% block content %}{% endblock %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>
