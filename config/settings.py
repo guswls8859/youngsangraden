@@ -13,7 +13,9 @@ KMA_API_KEY = os.getenv('KMA_API_KEY', '')
 
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + [
+    'port-0-youngsangraden-mnr0z8y3c0b4fb14.sel3.cloudtype.app',
+]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://port-0-youngsangraden-mnr0z8y3c0b4fb14.sel3.cloudtype.app',
