@@ -7,6 +7,7 @@ urlpatterns = [
     path('login/', views.UserLoginView.as_view(), name='login'),
     path('logout/', views.user_logout, name='logout'),
     path('register/', views.UserRegisterView.as_view(), name='register'),
+    path('set-emoji/', views.set_user_emoji, name='set_emoji'),
     # 관리자 패널
     path('admin/users/', views.AdminUserListView.as_view(), name='admin_user_list'),
     path('admin/users/create/', views.AdminUserCreateView.as_view(), name='admin_user_create'),

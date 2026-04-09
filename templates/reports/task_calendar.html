@@ -11,7 +11,25 @@
         <i class="bi bi-person-fill text-success"></i> 개인 업무
         {% endif %}
     </h4>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 align-items-center">
+        <!-- 내 이모지 설정 버튼 -->
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" id="myEmojiDropdown"
+                    data-bs-toggle="dropdown" aria-expanded="false" style="font-size:.85rem">
+                <span id="myEmojiDisplay">{{ request.user.emoji|default:"😶" }}</span> 내 이모지
+            </button>
+            <div class="dropdown-menu p-2" style="width:300px;min-width:300px;max-height:320px;overflow-y:auto" aria-labelledby="myEmojiDropdown">
+                <div class="mb-1 small text-muted fw-semibold">이모지 선택</div>
+                <div id="userEmojiGrid" style="display:flex;flex-wrap:wrap;gap:4px">
+                    {% for emoji in emoji_list %}
+                    <button type="button" class="user-emoji-opt btn btn-light btn-sm p-1"
+                            style="font-size:1.1rem;line-height:1;min-width:32px"
+                            data-emoji="{{ emoji }}">{{ emoji }}</button>
+                    {% endfor %}
+                </div>
+                <button type="button" id="clearMyEmoji" class="btn btn-link btn-sm p-0 mt-2 text-muted" style="font-size:.75rem">이모지 지우기</button>
+            </div>
+        </div>
         <a href="{% url 'reports:integrated_daily' %}" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-file-earmark-text"></i> 용산어린이정원 일일보고
         </a>
@@ -118,12 +136,17 @@
 /* 이름 태그 블록 (sf-item 스타일) */
 .cal-names { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
 .cal-name-tag {
-    border-radius: 3px; font-size: 0.7rem; overflow: hidden; cursor: pointer;
-    padding: 2px 5px; font-weight: 600; color: #fff;
+    border-radius: 4px; font-size: 0.72rem; cursor: pointer;
+    padding: 2px 5px; font-weight: 600; color: #333;
+    background: #f0f0f0; border: 1px solid #ddd;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     display: block; line-height: 1.4;
 }
-.cal-name-tag.partial { opacity: 0.45; }
+.cal-name-tag.partial { opacity: 0.55; }
+/* 개인 모드 업무명 태그 — 상태별 색 */
+.cal-task-doing { background: #cfe2ff; color: #084298; border-color: #9ec5fe; }
+.cal-task-hold  { background: #fff3cd; color: #664d03; border-color: #ffe69c; }
+.cal-task-done  { background: #d1e7dd; color: #0a3622; border-color: #a3cfbb; opacity: .6; }
 
 /* ── 모달 내 카드 ── */
 .task-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
@@ -150,10 +173,13 @@
 const CSRF           = '{{ csrf_token }}';
 const DAY_DOTS       = {{ day_dots_json|safe }};
 const MODE           = '{{ mode }}';
+const IS_MANAGER     = {% if request.user.role == 'manager' %}true{% else %}false{% endif %};
 const CREATE_URL     = "{% url 'reports:task_create' %}";
+const SET_EMOJI_URL  = "{% url 'accounts:set_emoji' %}";
 const PROGRESS_BASE  = "/reports/tasks/";
 const STATUS_BASE    = "/reports/tasks/";
 const DELETE_BASE    = "/reports/tasks/";
+const EDIT_BASE      = "/reports/tasks/";
 const SUBTASK_BASE   = "/reports/subtasks/";
 const SUBTASK_CREATE = "/reports/tasks/";
 
@@ -163,17 +189,28 @@ const taskModal  = new bootstrap.Modal(document.getElementById('taskModal'));
 // ── 이름 태그 렌더링 ─────────────────────────────────────
 function renderDots() {
     document.querySelectorAll('.cal-names').forEach(el => {
-        const day   = String(el.dataset.day);
-        const users = DAY_DOTS[day];
-        if (!users) return;
-        users.forEach(u => {
-            const tag = document.createElement('span');
-            tag.className = 'cal-name-tag' + (u.done < u.total ? ' partial' : '');
-            tag.style.background = u.color;
-            tag.title = `${u.name} (${u.done}/${u.total} 완료)`;
-            tag.textContent = u.name.length <= 3 ? u.name : u.name.slice(0, 3);
-            el.appendChild(tag);
-        });
+        const day = String(el.dataset.day);
+        const items = DAY_DOTS[day];
+        if (!items) return;
+
+        if (MODE === 'personal') {
+            items.forEach(t => {
+                const tag = document.createElement('span');
+                tag.className = `cal-name-tag cal-task-${t.status}`;
+                tag.title = t.task_name;
+                tag.textContent = t.task_name;
+                el.appendChild(tag);
+            });
+        } else {
+            items.forEach(u => {
+                const tag = document.createElement('span');
+                tag.className = 'cal-name-tag' + (u.done < u.total ? ' partial' : '');
+                tag.title = `${u.name} (${u.done}/${u.total} 완료)`;
+                const shortName = u.name.length <= 3 ? u.name : u.name.slice(0, 3);
+                tag.textContent = u.emoji ? `${shortName} ${u.emoji}` : shortName;
+                el.appendChild(tag);
+            });
+        }
     });
 }
 
@@ -212,11 +249,12 @@ function renderPanel(data, dateStr) {
         ? `<i class="bi bi-person-fill text-success"></i> 개인 업무`
         : `<i class="bi bi-person-fill"></i> 내 업무`;
 
+    const canAdd = isPersonal || IS_MANAGER;
     html += `<div class="mb-2 d-flex justify-content-between align-items-center">
         <span class="fw-semibold" style="font-size:.9rem">${myLabel}</span>
-        <button class="btn btn-sm ${isPersonal ? 'btn-success' : 'btn-primary'}" style="font-size:.75rem" id="toggleAddForm">
+        ${canAdd ? `<button class="btn btn-sm ${isPersonal ? 'btn-success' : 'btn-primary'}" style="font-size:.75rem" id="toggleAddForm">
             <i class="bi bi-plus"></i> 업무 추가
-        </button>
+        </button>` : ''}
     </div>`;
 
     html += `<div class="add-form-wrap d-none" id="addFormWrap">
@@ -225,7 +263,20 @@ function renderPanel(data, dateStr) {
             <input type="text" id="af_name" class="form-control form-control-sm" placeholder="업무명 *" maxlength="300">
         </div>
         <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1" style="font-size:.78rem;color:#495057">목표 완료일 (선택)</label>
+            <input type="date" id="af_end_date" class="form-control form-control-sm">
+        </div>
+        <div class="mb-2">
             <textarea id="af_note" class="form-control form-control-sm" rows="2" placeholder="비고 (선택)"></textarea>
+        </div>
+        <div class="mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small fw-semibold" style="font-size:.78rem;color:#495057">서브 업무 (선택)</span>
+                <button type="button" id="af_add_subtask" class="btn btn-link btn-sm p-0" style="font-size:.75rem">
+                    <i class="bi bi-plus-circle"></i> 추가
+                </button>
+            </div>
+            <div id="af_subtask_list"></div>
         </div>
         <div class="d-flex gap-2">
             <button class="btn btn-primary btn-sm flex-fill" id="af_saveBtn">저장</button>
@@ -243,12 +294,14 @@ function renderPanel(data, dateStr) {
         html += `<div class="team-user-header mt-3"><i class="bi bi-people-fill"></i> 팀 업무 현황</div>`;
         const byUser = {};
         data.team_tasks.forEach(t => {
-            if (!byUser[t.user_name]) byUser[t.user_name] = [];
-            byUser[t.user_name].push(t);
+            const key = t.user_name;
+            if (!byUser[key]) byUser[key] = { emoji: t.user_emoji, tasks: [] };
+            byUser[key].tasks.push(t);
         });
-        Object.entries(byUser).forEach(([name, tasks]) => {
-            html += `<div class="team-user-header">${name}</div>`;
-            tasks.forEach(t => { html += renderTeamTask(t); });
+        Object.entries(byUser).forEach(([name, info]) => {
+            const emojiStr = info.emoji ? `${info.emoji} ` : '';
+            html += `<div class="team-user-header">${emojiStr}${name}</div>`;
+            info.tasks.forEach(t => { html += renderTeamTask(t); });
         });
     }
 
@@ -262,13 +315,28 @@ function statusBadge(t) {
 }
 
 function renderSubtaskList(t, editable) {
-    let html = '<div class="subtask-list mt-2">';
+    const count = (t.subtasks || []).length;
+    const done  = (t.subtasks || []).filter(s => s.is_done).length;
+    const uid   = `st_${t.pk}`;
+
+    // 토글 버튼
+    let html = `<div class="subtask-toggle-wrap mt-1">
+        <button class="btn btn-link btn-sm p-0 subtask-toggle-btn" data-target="${uid}" style="font-size:.75rem;color:#6c757d;text-decoration:none">
+            <i class="bi bi-chevron-right subtask-chevron" style="font-size:.65rem;transition:transform .15s"></i>
+            서브 업무 <span class="text-muted">(${done}/${count})</span>
+        </button>
+    </div>`;
+
+    // 접힌 컨테이너
+    html += `<div class="subtask-body d-none" id="${uid}">`;
+    html += '<div class="subtask-list mt-1">';
     (t.subtasks || []).forEach(st => {
         const titleCls = st.is_done ? 'text-decoration-line-through text-muted' : '';
         if (editable) {
             html += `<div class="d-flex align-items-center gap-2 py-1 border-bottom border-light">
                 <input type="checkbox" class="form-check-input subtask-check" data-pk="${st.pk}" ${st.is_done ? 'checked' : ''} style="cursor:pointer">
-                <span class="${titleCls}" style="font-size:.82rem;flex:1">${escHtml(st.title)}</span>
+                <span class="${titleCls} subtask-title-display" data-pk="${st.pk}" style="font-size:.82rem;flex:1;cursor:text" title="클릭하여 수정">${escHtml(st.title)}</span>
+                <input type="text" class="form-control form-control-sm subtask-title-input d-none" data-pk="${st.pk}" value="${escHtml(st.title)}" style="flex:1;font-size:.82rem" maxlength="300">
                 <button class="btn btn-link btn-sm text-danger p-0 subtask-del-btn" data-pk="${st.pk}" title="삭제"><i class="bi bi-x-lg" style="font-size:.65rem"></i></button>
             </div>`;
         } else {
@@ -292,7 +360,41 @@ function renderSubtaskList(t, editable) {
             </div>
         </div>`;
     }
+    html += '</div>'; // subtask-body
     return html;
+}
+
+function fmtDate(iso) {
+    if (!iso) return '';
+    return iso.slice(5).replace('-', '/');
+}
+
+function datesHtml(t) {
+    const parts = [];
+    // 등록일
+    parts.push(`<span class="text-muted" style="font-size:.7rem">📅 등록 ${fmtDate(t.start_date)}</span>`);
+    // 목표완료일 + D-day
+    if (t.end_date) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const end = new Date(t.end_date); end.setHours(0,0,0,0);
+        const diff = Math.round((end - today) / 86400000);
+        let dday, cls;
+        if (t.status === 'done') {
+            dday = ''; cls = 'text-muted';
+        } else if (diff < 0) {
+            dday = ` (D+${Math.abs(diff)} 초과)`; cls = 'text-danger fw-semibold';
+        } else if (diff === 0) {
+            dday = ' (D-Day)'; cls = 'text-danger fw-semibold';
+        } else {
+            dday = ` (D-${diff})`; cls = diff <= 3 ? 'text-warning fw-semibold' : 'text-secondary';
+        }
+        parts.push(`<span class="${cls}" style="font-size:.7rem">🎯 목표 ${fmtDate(t.end_date)}${dday}</span>`);
+    }
+    // 완료일
+    if (t.completed_date) {
+        parts.push(`<span class="text-success" style="font-size:.7rem">✅ 완료 ${fmtDate(t.completed_date)}</span>`);
+    }
+    return `<div class="d-flex flex-wrap gap-2 mt-1">${parts.join('')}</div>`;
 }
 
 function renderMyTask(t) {
@@ -312,19 +414,24 @@ function renderMyTask(t) {
             <span class="progress-val">${t.progress}%</span>
            </div>`;
 
-    return `<div class="task-card ${t.status === 'done' ? 'done-card' : ''}" data-pk="${t.pk}">
+    return `<div class="task-card ${t.status === 'done' ? 'done-card' : ''}" data-pk="${t.pk}" data-note="${escHtml(t.note || '')}" data-end-date="${t.end_date || ''}">
+        <!-- 뷰 모드 -->
         <div class="d-flex justify-content-between align-items-start">
-            <div class="task-name">${escHtml(t.task_name)}</div>
+            <div class="flex-fill me-1">
+                <span class="task-name task-name-display" data-pk="${t.pk}" style="cursor:text" title="클릭하여 수정">${escHtml(t.task_name)}</span>
+                <input type="text" class="form-control form-control-sm task-name-input d-none" data-pk="${t.pk}" value="${escHtml(t.task_name)}" maxlength="300" style="font-size:.9rem;font-weight:600">
+            </div>
             ${statusBadge(t)}
         </div>
+        ${datesHtml(t)}
         ${noteHtml}
         ${progressHtml}
         <div class="subtask-section">${renderSubtaskList(t, true)}</div>
-        <div class="task-actions mt-2">
+        <div class="mt-2 d-flex gap-1 justify-content-end flex-wrap">
             ${t.status !== 'doing' ? `<button class="btn btn-outline-secondary btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="doing" style="font-size:.72rem">진행중</button>` : ''}
             ${t.status !== 'hold'  ? `<button class="btn btn-outline-warning  btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="hold"  style="font-size:.72rem">보류</button>` : ''}
             ${t.status !== 'done'  ? `<button class="btn btn-outline-success  btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="done"  style="font-size:.72rem">완료</button>` : ''}
-            <button class="btn btn-outline-danger btn-sm py-0 del-btn ms-auto" data-pk="${t.pk}" style="font-size:.72rem">삭제</button>
+            <button class="btn btn-outline-danger btn-sm py-0 del-btn" data-pk="${t.pk}" style="font-size:.72rem"><i class="bi bi-trash"></i></button>
         </div>
     </div>`;
 }
@@ -336,6 +443,7 @@ function renderTeamTask(t) {
             <div class="task-name">${escHtml(t.task_name)}</div>
             ${statusBadge(t)}
         </div>
+        ${datesHtml(t)}
         ${noteHtml}
         ${t.subtasks && t.subtasks.length > 0 ? renderSubtaskList(t, false) : ''}
         <div class="progress-wrap">
@@ -348,22 +456,50 @@ function renderTeamTask(t) {
 }
 
 function bindPanelEvents(dateStr) {
+    function addSubtaskRow() {
+        const list = document.getElementById('af_subtask_list');
+        const row = document.createElement('div');
+        row.className = 'd-flex gap-1 mb-1 af-subtask-row';
+        row.innerHTML = `
+            <input type="text" class="form-control form-control-sm af-subtask-input" placeholder="서브 업무명" maxlength="300">
+            <button type="button" class="btn btn-outline-danger btn-sm af-subtask-del px-2"><i class="bi bi-x"></i></button>
+        `;
+        row.querySelector('.af-subtask-del').addEventListener('click', () => row.remove());
+        row.querySelector('.af-subtask-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addSubtaskRow(); }
+        });
+        list.appendChild(row);
+        row.querySelector('.af-subtask-input').focus();
+    }
+
     document.getElementById('toggleAddForm')?.addEventListener('click', () => {
-        document.getElementById('addFormWrap').classList.toggle('d-none');
-        document.getElementById('af_name').focus();
+        const wrap = document.getElementById('addFormWrap');
+        wrap.classList.toggle('d-none');
+        if (!wrap.classList.contains('d-none')) {
+            document.getElementById('af_name').focus();
+        }
     });
     document.getElementById('af_cancelBtn')?.addEventListener('click', () => {
         document.getElementById('addFormWrap').classList.add('d-none');
+        document.getElementById('af_subtask_list').innerHTML = '';
+        document.getElementById('af_end_date').value = '';
     });
+
+    document.getElementById('af_add_subtask')?.addEventListener('click', addSubtaskRow);
     document.getElementById('af_saveBtn')?.addEventListener('click', () => {
         const name = document.getElementById('af_name').value.trim();
         const note = document.getElementById('af_note').value.trim();
+        const endDate = document.getElementById('af_end_date').value;
         if (!name) { alert('업무명을 입력해주세요.'); return; }
+        const subtaskTitles = Array.from(document.querySelectorAll('.af-subtask-input'))
+            .map(i => i.value.trim()).filter(v => v);
+        const params = new URLSearchParams({ task_name: name, note, end_date: endDate, start_date: dateStr, status: 'doing', progress: 0 });
+        subtaskTitles.forEach(t => params.append('subtask_titles', t));
         fetch(CREATE_URL, {
             method: 'POST',
             headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded',
                         'X-Requested-With': 'XMLHttpRequest' },
-            body: new URLSearchParams({ task_name: name, note, start_date: dateStr, status: 'doing', progress: 0 }),
+            body: params,
         })
         .then(r => r.json())
         .then(d => { if (d.ok) openModal(dateStr); else alert('저장 실패'); });
@@ -407,6 +543,93 @@ function bindPanelEvents(dateStr) {
         });
     });
 
+    // ── 업무명 인라인 편집 ──────────────────────────────────
+    document.querySelectorAll('.task-name-display').forEach(span => {
+        span.addEventListener('click', () => {
+            span.classList.add('d-none');
+            const input = span.nextElementSibling;
+            input.classList.remove('d-none');
+            input.focus();
+            input.select();
+        });
+    });
+    document.querySelectorAll('.task-name-input').forEach(input => {
+        let saving = false;
+        const saveTaskName = () => {
+            if (saving) return;
+            const taskName = input.value.trim();
+            if (!taskName) { input.focus(); return; }
+            const card = input.closest('.task-card');
+            const note    = card.dataset.note || '';
+            const endDate = card.dataset.endDate || '';
+            saving = true;
+            fetch(`${EDIT_BASE}${input.dataset.pk}/edit/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ task_name: taskName, note, end_date: endDate }),
+            })
+            .then(r => r.json())
+            .then(d => {
+                saving = false;
+                if (d.ok) {
+                    const span = input.previousElementSibling;
+                    span.textContent = taskName;
+                    input.classList.add('d-none');
+                    span.classList.remove('d-none');
+                }
+            })
+            .catch(() => { saving = false; });
+        };
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveTaskName(); }
+            if (e.key === 'Escape') {
+                input.value = input.previousElementSibling.textContent;
+                input.classList.add('d-none');
+                input.previousElementSibling.classList.remove('d-none');
+            }
+        });
+        input.addEventListener('blur', saveTaskName);
+    });
+
+    // ── 서브업무 제목 인라인 편집 ────────────────────────────
+    document.querySelectorAll('.subtask-title-display').forEach(span => {
+        span.addEventListener('click', () => {
+            span.classList.add('d-none');
+            const input = span.nextElementSibling;
+            input.classList.remove('d-none');
+            input.focus();
+            input.select();
+        });
+    });
+    document.querySelectorAll('.subtask-title-input').forEach(input => {
+        const saveSubtask = () => {
+            const title = input.value.trim();
+            if (!title) { input.focus(); return; }
+            fetch(`${SUBTASK_BASE}${input.dataset.pk}/edit/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ title }),
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    const span = input.previousElementSibling;
+                    span.textContent = d.title;
+                    input.classList.add('d-none');
+                    span.classList.remove('d-none');
+                }
+            });
+        };
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveSubtask(); }
+            if (e.key === 'Escape') {
+                input.classList.add('d-none');
+                input.previousElementSibling.classList.remove('d-none');
+            }
+        });
+        input.addEventListener('blur', saveSubtask);
+    });
+
     // ── 서브 업무 이벤트 ──────────────────────────────────────
     document.querySelectorAll('.subtask-check').forEach(cb => {
         cb.addEventListener('change', () => {
@@ -445,6 +668,15 @@ function bindPanelEvents(dateStr) {
         });
     });
 
+    document.querySelectorAll('.subtask-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const body = document.getElementById(btn.dataset.target);
+            const chevron = btn.querySelector('.subtask-chevron');
+            const collapsed = body.classList.toggle('d-none');
+            chevron.style.transform = collapsed ? '' : 'rotate(90deg)';
+        });
+    });
+
     document.querySelectorAll('.add-subtask-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const form = document.getElementById(`stform_${btn.dataset.taskPk}`);
@@ -455,23 +687,33 @@ function bindPanelEvents(dateStr) {
         });
     });
 
+    function submitSubtask(btn) {
+        const taskPk = btn.dataset.taskPk;
+        const input = btn.previousElementSibling;
+        const title = input.value.trim();
+        if (!title) { input.focus(); return; }
+        fetch(`${SUBTASK_CREATE}${taskPk}/subtasks/create/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': CSRF,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: new URLSearchParams({ title }),
+        })
+        .then(r => r.json())
+        .then(d => { if (d.ok) openModal(selectedDate); });
+    }
+
     document.querySelectorAll('.st-save-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const taskPk = btn.dataset.taskPk;
-            const input = btn.previousElementSibling;
-            const title = input.value.trim();
-            if (!title) { input.focus(); return; }
-            fetch(`${SUBTASK_CREATE}${taskPk}/subtasks/create/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': CSRF,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: new URLSearchParams({ title }),
-            })
-            .then(r => r.json())
-            .then(d => { if (d.ok) openModal(selectedDate); });
+        btn.addEventListener('click', () => submitSubtask(btn));
+    });
+    document.querySelectorAll('.st-input').forEach(input => {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                submitSubtask(input.nextElementSibling);
+            }
         });
     });
 
@@ -491,6 +733,34 @@ function bindPanelEvents(dateStr) {
 function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── 내 이모지 설정 ────────────────────────────────────────
+function saveUserEmoji(emoji) {
+    fetch(SET_EMOJI_URL, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ emoji }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            document.getElementById('myEmojiDisplay').textContent = d.emoji || '😶';
+        }
+    });
+}
+
+document.querySelectorAll('.user-emoji-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+        saveUserEmoji(btn.dataset.emoji);
+        // 드롭다운 닫기
+        bootstrap.Dropdown.getInstance(document.getElementById('myEmojiDropdown'))?.hide();
+    });
+});
+
+document.getElementById('clearMyEmoji')?.addEventListener('click', () => {
+    saveUserEmoji('');
+    bootstrap.Dropdown.getInstance(document.getElementById('myEmojiDropdown'))?.hide();
+});
 
 renderDots();
 </script>

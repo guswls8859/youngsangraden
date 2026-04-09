@@ -234,7 +234,21 @@ def task_create(request):
         if form.is_valid():
             task = form.save(commit=False)
             task.user = request.user
+            end_date_str = request.POST.get('end_date', '').strip()
+            if end_date_str:
+                try:
+                    task.end_date = datetime.date.fromisoformat(end_date_str)
+                except ValueError:
+                    pass
             task.save()
+            # 서브업무 동시 생성
+            subtask_titles = request.POST.getlist('subtask_titles')
+            for i, title in enumerate(t.strip() for t in subtask_titles):
+                if title:
+                    SubTask.objects.create(daily_task=task, title=title, order=i)
+            if any(t.strip() for t in subtask_titles):
+                task.recalculate_progress()
+                task.refresh_from_db()
             if is_ajax:
                 return JsonResponse({
                     'ok': True, 'pk': task.pk,
@@ -283,10 +297,10 @@ def task_update_status(request, pk):
             if status == 'done':
                 task.progress = 100
                 task.status = 'done'
-                task.save()
+                task.save()  # save()가 completed_date 자동 처리
             else:
                 # 완료→진행중/보류 전환: save()의 progress==100 강제 잠금을 우회
-                update_fields = {'status': status}
+                update_fields = {'status': status, 'completed_date': None}
                 # 서브 업무 없이 100%인 경우 진행률도 초기화
                 if task.progress == 100 and not task.subtasks.exists():
                     update_fields['progress'] = 0
@@ -299,6 +313,37 @@ def task_update_status(request, pk):
                 'progress': task.progress,
             })
     return redirect('reports:task_calendar')
+
+
+@login_required
+def task_edit(request, pk):
+    """AJAX: 업무 내용 수정 (업무명, 목표완료일, 비고)"""
+    if _require_operations(request):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    task = get_object_or_404(DailyTask, pk=pk, user=request.user)
+    if request.method == 'POST':
+        task_name = request.POST.get('task_name', '').strip()
+        note = request.POST.get('note', '').strip()
+        end_date_str = request.POST.get('end_date', '').strip()
+        if not task_name:
+            return JsonResponse({'ok': False, 'error': '업무명 필요'}, status=400)
+        task.task_name = task_name
+        task.note = note
+        if end_date_str:
+            try:
+                task.end_date = datetime.date.fromisoformat(end_date_str)
+            except ValueError:
+                pass
+        else:
+            task.end_date = None
+        task.save()
+        return JsonResponse({
+            'ok': True,
+            'task_name': task.task_name,
+            'note': task.note,
+            'end_date': task.end_date.isoformat() if task.end_date else '',
+        })
+    return JsonResponse({'error': 'method'}, status=405)
 
 
 @login_required
@@ -315,6 +360,22 @@ def task_delete(request, pk):
 
 
 # ── SubTask 뷰 ─────────────────────────────────────────────────
+
+@login_required
+def subtask_edit(request, pk):
+    """서브 업무 제목 수정"""
+    if _require_operations(request):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    subtask = get_object_or_404(SubTask, pk=pk, daily_task__user=request.user)
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        if not title:
+            return JsonResponse({'ok': False}, status=400)
+        subtask.title = title
+        subtask.save()
+        return JsonResponse({'ok': True, 'title': subtask.title})
+    return JsonResponse({'error': 'method'}, status=405)
+
 
 @login_required
 def subtask_create(request, pk):
@@ -370,12 +431,6 @@ def subtask_delete(request, pk):
 
 import calendar as _calendar
 
-_USER_COLORS = [
-    '#0d6efd', '#dc3545', '#198754', '#fd7e14',
-    '#6f42c1', '#0dcaf0', '#20c997', '#ffc107',
-]
-
-
 class TaskCalendarView(OperationsAccessMixin, TemplateView):
     """운영사무국 팀/개인 캘린더 — 날짜 클릭 시 투두 패널"""
     template_name = 'reports/task_calendar.html'
@@ -400,42 +455,92 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
 
         cal = _calendar.Calendar(firstweekday=6).monthdayscalendar(year, month)
 
-        User = get_user_model()
-        ops_users = list(
-            User.objects.filter(organization='operations', is_active=True)
-            .order_by('last_name', 'username')
-        )
-        user_color = {u.pk: _USER_COLORS[i % len(_USER_COLORS)] for i, u in enumerate(ops_users)}
+        import calendar as _cal_mod
+        last_day = _cal_mod.monthrange(year, month)[1]
+        month_start = datetime.date(year, month, 1)
+        month_end = datetime.date(year, month, last_day)
 
-        tasks_qs = (
-            DailyTask.objects
-            .filter(start_date__year=year, start_date__month=month,
-                    user__organization='operations')
-            .select_related('user')
-        )
         if mode == 'personal':
-            tasks_qs = tasks_qs.filter(user=self.request.user)
-
-        # day_map[day] = {uid: {name, color, total, done}}
-        day_map: dict = {}
-        for t in tasks_qs:
-            d, uid = t.start_date.day, t.user_id
-            day_map.setdefault(d, {})
-            if uid not in day_map[d]:
-                day_map[d][uid] = {
-                    'name':  t.user.get_full_name() or t.user.username,
-                    'color': user_color.get(uid, '#6c757d'),
-                    'total': 0, 'done': 0,
-                }
-            day_map[d][uid]['total'] += 1
-            if t.status == 'done':
-                day_map[d][uid]['done'] += 1
+            # 이달 범위와 겹치는 내 업무 전부
+            tasks_qs = (
+                DailyTask.objects
+                .filter(
+                    user=self.request.user,
+                    user__organization='operations',
+                    start_date__lte=month_end,
+                )
+                .filter(
+                    Q(end_date__gte=month_start) |
+                    Q(end_date__isnull=True, start_date__gte=month_start)
+                )
+                .select_related('user')
+            )
+        else:
+            tasks_qs = (
+                DailyTask.objects
+                .filter(start_date__year=year, start_date__month=month,
+                        user__organization='operations')
+                .select_related('user')
+            )
 
         import json
-        day_dots_json = json.dumps({
-            d: list(v.values()) for d, v in day_map.items()
-        })
+        day_map: dict = {}
 
+        if mode == 'personal':
+            # 개인: 업무명을 날짜별로 나열
+            for t in tasks_qs:
+                task_info = {'task_name': t.task_name, 'status': t.status}
+                if t.end_date:
+                    span_start = max(t.start_date, month_start)
+                    span_end   = min(t.end_date, month_end)
+                    cur = span_start
+                    while cur <= span_end:
+                        day_map.setdefault(cur.day, []).append(task_info)
+                        cur += datetime.timedelta(days=1)
+                elif month_start <= t.start_date <= month_end:
+                    day_map.setdefault(t.start_date.day, []).append(task_info)
+            day_dots_json = json.dumps(day_map)
+        else:
+            # 팀: 사용자별 집계
+            team_map: dict = {}
+            for t in tasks_qs:
+                uid = t.user_id
+                d = t.start_date.day
+                team_map.setdefault(d, {})
+                if uid not in team_map[d]:
+                    team_map[d][uid] = {
+                        'name': t.user.get_full_name() or t.user.username,
+                        'emoji': t.user.emoji,
+                        'total': 0, 'done': 0,
+                    }
+                team_map[d][uid]['total'] += 1
+                if t.status == 'done':
+                    team_map[d][uid]['done'] += 1
+            day_dots_json = json.dumps({
+                d: list(v.values()) for d, v in team_map.items()
+            })
+
+        emoji_list = [
+            '☃️',
+            # 동물
+            '🐶','🐱','🐭','🐰','🦊','🐻','🐼','🐨','🐯','🦁',
+            '🐸','🐵','🐔','🐧','🐦','🦆','🦅','🦉','🦋','🐝',
+            # 자연·식물
+            '🌿','🌱','🌲','🌳','🌴','🍀','🌸','🌺','🌻','🌼',
+            '🍁','🍂','🌾','🎋','🎍','🌵','🌊','🔥','⛅','🌈',
+            # 음식
+            '🍎','🍊','🍋','🍇','🍓','🫐','🍔','🍕','🍣','☕',
+            # 업무·도구
+            '📋','📝','📊','📅','📌','📍','🔧','⚙️','🔑','💡',
+            '🎯','🚀','💪','🙌','👥','⭐','🏆','🎉','✅','⏰',
+            '📞','📢','🔔','🏗️','💰','📦','🎨','🛠️','🔍','💼',
+            '📁','🗂️','📮','📬','🖥️','⌨️','🖱️','📱','📷','🎥',
+            # 스포츠·활동
+            '⚽','🏀','🎾','🏊','🚴','🏋️','🎮','♟️','🎯','🏅',
+            # 기호·색상
+            '🔴','🟡','🟢','🔵','🟠','🟣','⚫','⚪','🔶','🔷',
+            '⭐','💫','✨','❤️','🧡','💛','💚','💙','💜','🖤',
+        ]
         ctx.update({
             'year': year, 'month': month,
             'prev_year': prev_year, 'prev_month': prev_month,
@@ -444,6 +549,7 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
             'day_dots_json': day_dots_json,
             'selected_date': self.request.GET.get('selected', ''),
             'mode': mode,
+            'emoji_list': emoji_list,
         })
         return ctx
 
@@ -460,15 +566,31 @@ def task_day_tasks(request, date_str):
 
     mode = request.GET.get('mode', 'team')
 
-    tasks_qs = (
-        DailyTask.objects
-        .filter(start_date=target_date, user__organization='operations')
-        .select_related('user')
-        .prefetch_related('subtasks')
-        .order_by('user__last_name', 'user__username', 'status', '-created_at')
-    )
     if mode == 'personal':
-        tasks_qs = tasks_qs.filter(user=request.user)
+        # 개인: start_date <= target <= end_date 범위에 걸치는 업무 모두 표시
+        tasks_qs = (
+            DailyTask.objects
+            .filter(
+                user=request.user,
+                user__organization='operations',
+                start_date__lte=target_date,
+            )
+            .filter(
+                Q(end_date__gte=target_date) |
+                Q(end_date__isnull=True, start_date=target_date)
+            )
+            .select_related('user')
+            .prefetch_related('subtasks')
+            .order_by('status', 'end_date', '-created_at')
+        )
+    else:
+        tasks_qs = (
+            DailyTask.objects
+            .filter(start_date=target_date, user__organization='operations')
+            .select_related('user')
+            .prefetch_related('subtasks')
+            .order_by('user__last_name', 'user__username', 'status', '-created_at')
+        )
 
     my_tasks, team_tasks = [], []
     for t in tasks_qs:
@@ -479,11 +601,15 @@ def task_day_tasks(request, date_str):
         item = {
             'pk': t.pk,
             'task_name': t.task_name,
+            'start_date': t.start_date.isoformat(),
+            'end_date': t.end_date.isoformat() if t.end_date else '',
+            'completed_date': t.completed_date.isoformat() if t.completed_date else '',
             'progress': t.progress,
             'status': t.status,
             'status_display': t.get_status_display(),
             'note': t.note,
             'user_name': t.user.get_full_name() or t.user.username,
+            'user_emoji': t.user.emoji,
             'subtasks': subtasks,
         }
         (my_tasks if t.user_id == request.user.pk else team_tasks).append(item)

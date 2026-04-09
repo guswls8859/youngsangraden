@@ -71,6 +71,14 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
+    #  'default':{
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': 'yongsan_garden',
+    #     'USER': 'postgres',
+    #     'PASSWORD': '1235gg',
+    #     'HOST': 'localhost',
+    #     'PORT': '5432',
+    # }
     'default':{
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'yongsan_garden',

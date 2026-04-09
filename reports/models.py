@@ -73,6 +73,8 @@ class DailyTask(models.Model):
         verbose_name='작성자'
     )
     start_date = models.DateField(default=timezone.localdate, verbose_name='업무 시작일자')
+    end_date = models.DateField(null=True, blank=True, verbose_name='목표 완료일')
+    completed_date = models.DateField(null=True, blank=True, verbose_name='완료일')
     task_name = models.CharField(max_length=300, verbose_name='업무명')
     progress = models.IntegerField(default=0, verbose_name='진행도(%)')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='doing', verbose_name='상태')
@@ -92,8 +94,11 @@ class DailyTask(models.Model):
         self.progress = max(0, min(100, self.progress))
         if self.progress == 100:
             self.status = 'done'
+            if not self.completed_date:
+                self.completed_date = timezone.localdate()
         elif self.status == 'done' and self.progress < 100:
             self.status = 'doing'
+            self.completed_date = None
         super().save(*args, **kwargs)
 
     def recalculate_progress(self):
@@ -105,11 +110,15 @@ class DailyTask(models.Model):
         done = subtasks.filter(is_done=True).count()
         progress = int(done / total * 100)
         status = self.status
+        completed = None
         if progress == 100:
             status = 'done'
+            completed = self.completed_date or timezone.localdate()
         elif status == 'done' and progress < 100:
             status = 'doing'
-        DailyTask.objects.filter(pk=self.pk).update(progress=progress, status=status)
+        DailyTask.objects.filter(pk=self.pk).update(
+            progress=progress, status=status, completed_date=completed
+        )
 
 
 class SubTask(models.Model):

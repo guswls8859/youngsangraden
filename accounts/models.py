@@ -19,6 +19,7 @@ class User(AbstractUser):
     ]
 
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='staff', verbose_name='역할')
+    emoji = models.CharField(max_length=10, blank=True, verbose_name='이모지')
     department = models.CharField(max_length=100, blank=True, verbose_name='부서')
     phone = models.CharField(max_length=20, blank=True, verbose_name='연락처')
     organization = models.CharField(
