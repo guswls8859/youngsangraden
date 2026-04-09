@@ -84,28 +84,25 @@
                     <i class="bi bi-cloud-sun"></i> 전일 방문현황 / 명일 기상상황
                 </div>
                 <div class="card-body">
-                    <div class="mb-2">
-                        <label class="form-label small fw-medium">전일 입장 총수 (명)</label>
-                        <input type="number" name="yesterday_total" class="form-control form-control-sm"
-                               min="0" value="{{ ops.yesterday_total|default:0 }}">
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded mb-2"
+                         style="background:#f8f9fa; border:1px solid #dee2e6">
+                        <span class="small fw-medium text-muted">전일 입장 총수</span>
+                        <span class="fw-bold">{{ yesterday_total|default:0 }} 명</span>
                     </div>
-                    <div class="row g-2">
-                        <div class="col-4">
-                            <label class="form-label small fw-medium">기온 최저 (°)</label>
-                            <input type="number" name="tomorrow_temp_min" class="form-control form-control-sm"
-                                   value="{{ ops.tomorrow_temp_min|default:0 }}">
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-medium">기온 최고 (°)</label>
-                            <input type="number" name="tomorrow_temp_max" class="form-control form-control-sm"
-                                   value="{{ ops.tomorrow_temp_max|default:0 }}">
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small fw-medium">강수확률 (%)</label>
-                            <input type="number" name="tomorrow_rain_pct" class="form-control form-control-sm"
-                                   min="0" max="100" value="{{ ops.tomorrow_rain_pct|default:0 }}">
-                        </div>
+                    {% if weather_auto %}
+                    <div class="d-flex align-items-center justify-content-between p-2 rounded"
+                         style="background:#e8f4fd; border:1px solid #b8d9f0">
+                        <span class="small text-muted">
+                            <i class="bi bi-cloud-sun-fill text-info"></i>
+                            명일 기상 <span class="text-muted" style="font-size:.75rem">({{ weather_auto.source }})</span>
+                        </span>
+                        <span class="small fw-bold">
+                            최저 {{ weather_auto.temp_min }}° / 최고 {{ weather_auto.temp_max }}° / 강수확률 {{ weather_auto.rain_pct }}%
+                        </span>
                     </div>
+                    {% else %}
+                    <div class="text-muted small p-2">기상 정보를 불러오는 중...</div>
+                    {% endif %}
                 </div>
             </div>
 

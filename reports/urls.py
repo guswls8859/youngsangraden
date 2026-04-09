@@ -4,12 +4,19 @@ from . import views
 app_name = 'reports'
 
 urlpatterns = [
-    # 투두리스트
+    # 캘린더 (투두 진입점)
+    path('calendar/', views.TaskCalendarView.as_view(), name='task_calendar'),
+    path('calendar/<str:date_str>/tasks/', views.task_day_tasks, name='task_day_tasks'),
+    # 투두리스트 (구버전 — 캘린더로 리다이렉트)
     path('tasks/', views.TaskListView.as_view(), name='task_list'),
     path('tasks/create/', views.task_create, name='task_create'),
     path('tasks/<int:pk>/progress/', views.task_update_progress, name='task_progress'),
     path('tasks/<int:pk>/status/', views.task_update_status, name='task_status'),
     path('tasks/<int:pk>/delete/', views.task_delete, name='task_delete'),
+    # 서브 업무
+    path('tasks/<int:pk>/subtasks/create/', views.subtask_create, name='subtask_create'),
+    path('subtasks/<int:pk>/toggle/', views.subtask_toggle, name='subtask_toggle'),
+    path('subtasks/<int:pk>/delete/', views.subtask_delete, name='subtask_delete'),
     path('tasks/report/', views.TaskManagerReportView.as_view(), name='task_report'),
     path('tasks/report/pdf/', views.task_daily_pdf, name='task_daily_pdf'),
     path('tasks/report/weekly/', views.TaskWeeklyReportView.as_view(), name='task_weekly_report'),

@@ -12,7 +12,7 @@
 {% if user.is_authenticated %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
-        <a class="navbar-brand fw-bold" href="{% url 'reports:task_list' %}">
+        <a class="navbar-brand fw-bold" href="{% url 'reports:task_calendar' %}">
             <i class="bi bi-clipboard2-check"></i><span class="brand-text"> 용산어린이정원 업무보고</span>
         </a>
         <a href="{% url 'main_menu' %}" class="btn btn-sm btn-outline-light me-2">
@@ -25,7 +25,14 @@
             <ul class="navbar-nav me-auto">
                 {% if user.organization == 'operations' %}
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'reports:task_list' %}"><i class="bi bi-check2-square"></i> 업무 목록</a>
+                    <a class="nav-link" href="{% url 'reports:task_calendar' %}?mode=team">
+                        <i class="bi bi-people-fill"></i> 전체 일정
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'reports:task_calendar' %}?mode=personal">
+                        <i class="bi bi-person-fill"></i> 개인 업무
+                    </a>
                 </li>
                 {% if user.role == 'manager' %}
                 <li class="nav-item dropdown">

@@ -8,7 +8,7 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from .models import DailyReport, TaskItem, DailyTask, OperationsDailyData
+from .models import DailyReport, TaskItem, DailyTask, SubTask, OperationsDailyData
 from .forms import DailyReportForm, DailyTaskForm
 from .pdf import build_report_pdf, build_daily_pdf, build_weekly_pdf, build_daily_task_pdf, build_weekly_task_pdf
 
@@ -228,13 +228,25 @@ class TaskListView(OperationsAccessMixin, ListView):
 def task_create(request):
     if _require_operations(request):
         return redirect('main_menu')
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if request.method == 'POST':
         form = DailyTaskForm(request.POST)
         if form.is_valid():
             task = form.save(commit=False)
             task.user = request.user
             task.save()
-    return redirect('reports:task_list')
+            if is_ajax:
+                return JsonResponse({
+                    'ok': True, 'pk': task.pk,
+                    'task_name': task.task_name,
+                    'progress': task.progress,
+                    'status': task.status,
+                    'status_display': task.get_status_display(),
+                    'note': task.note,
+                })
+        elif is_ajax:
+            return JsonResponse({'ok': False}, status=400)
+    return redirect('reports:task_calendar')
 
 
 @login_required
@@ -260,28 +272,223 @@ def task_update_progress(request, pk):
 
 @login_required
 def task_update_status(request, pk):
-    """상태 변경 (보류 등)"""
+    """상태 변경 — AJAX/일반 모두 지원"""
     if _require_operations(request):
         return redirect('main_menu')
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     task = get_object_or_404(DailyTask, pk=pk, user=request.user)
     if request.method == 'POST':
         status = request.POST.get('status')
         if status in ('doing', 'hold', 'done'):
-            task.status = status
             if status == 'done':
                 task.progress = 100
-            task.save()
-    return redirect('reports:task_list')
+                task.status = 'done'
+                task.save()
+            else:
+                # 완료→진행중/보류 전환: save()의 progress==100 강제 잠금을 우회
+                update_fields = {'status': status}
+                # 서브 업무 없이 100%인 경우 진행률도 초기화
+                if task.progress == 100 and not task.subtasks.exists():
+                    update_fields['progress'] = 0
+                DailyTask.objects.filter(pk=task.pk).update(**update_fields)
+                task.refresh_from_db()
+        if is_ajax:
+            return JsonResponse({
+                'ok': True, 'status': task.status,
+                'status_display': task.get_status_display(),
+                'progress': task.progress,
+            })
+    return redirect('reports:task_calendar')
 
 
 @login_required
 def task_delete(request, pk):
     if _require_operations(request):
         return redirect('main_menu')
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     task = get_object_or_404(DailyTask, pk=pk, user=request.user)
     if request.method == 'POST':
         task.delete()
-    return redirect('reports:task_list')
+        if is_ajax:
+            return JsonResponse({'ok': True})
+    return redirect('reports:task_calendar')
+
+
+# ── SubTask 뷰 ─────────────────────────────────────────────────
+
+@login_required
+def subtask_create(request, pk):
+    """서브 업무 생성"""
+    if _require_operations(request):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    task = get_object_or_404(DailyTask, pk=pk, user=request.user)
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        if not title:
+            return JsonResponse({'ok': False, 'error': '제목 필요'}, status=400)
+        order = task.subtasks.count()
+        SubTask.objects.create(daily_task=task, title=title, order=order)
+        task.recalculate_progress()
+        return JsonResponse({'ok': True})
+    return JsonResponse({'error': 'method'}, status=405)
+
+
+@login_required
+def subtask_toggle(request, pk):
+    """서브 업무 완료 토글"""
+    if _require_operations(request):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    subtask = get_object_or_404(SubTask, pk=pk, daily_task__user=request.user)
+    if request.method == 'POST':
+        subtask.is_done = not subtask.is_done
+        subtask.save()
+        subtask.daily_task.recalculate_progress()
+        task = DailyTask.objects.get(pk=subtask.daily_task_id)
+        return JsonResponse({
+            'ok': True,
+            'is_done': subtask.is_done,
+            'progress': task.progress,
+            'status': task.status,
+            'status_display': task.get_status_display(),
+        })
+    return JsonResponse({'error': 'method'}, status=405)
+
+
+@login_required
+def subtask_delete(request, pk):
+    """서브 업무 삭제"""
+    if _require_operations(request):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    subtask = get_object_or_404(SubTask, pk=pk, daily_task__user=request.user)
+    if request.method == 'POST':
+        task = subtask.daily_task
+        subtask.delete()
+        task.recalculate_progress()
+        return JsonResponse({'ok': True})
+    return JsonResponse({'error': 'method'}, status=405)
+
+
+import calendar as _calendar
+
+_USER_COLORS = [
+    '#0d6efd', '#dc3545', '#198754', '#fd7e14',
+    '#6f42c1', '#0dcaf0', '#20c997', '#ffc107',
+]
+
+
+class TaskCalendarView(OperationsAccessMixin, TemplateView):
+    """운영사무국 팀/개인 캘린더 — 날짜 클릭 시 투두 패널"""
+    template_name = 'reports/task_calendar.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        today = timezone.localdate()
+        try:
+            year  = int(self.request.GET.get('year',  today.year))
+            month = int(self.request.GET.get('month', today.month))
+            if not (1 <= month <= 12):
+                raise ValueError
+        except (ValueError, TypeError):
+            year, month = today.year, today.month
+
+        mode = self.request.GET.get('mode', 'team')
+        if mode not in ('team', 'personal'):
+            mode = 'team'
+
+        prev_year,  prev_month  = (year - 1, 12) if month == 1  else (year, month - 1)
+        next_year,  next_month  = (year + 1, 1)  if month == 12 else (year, month + 1)
+
+        cal = _calendar.Calendar(firstweekday=6).monthdayscalendar(year, month)
+
+        User = get_user_model()
+        ops_users = list(
+            User.objects.filter(organization='operations', is_active=True)
+            .order_by('last_name', 'username')
+        )
+        user_color = {u.pk: _USER_COLORS[i % len(_USER_COLORS)] for i, u in enumerate(ops_users)}
+
+        tasks_qs = (
+            DailyTask.objects
+            .filter(start_date__year=year, start_date__month=month,
+                    user__organization='operations')
+            .select_related('user')
+        )
+        if mode == 'personal':
+            tasks_qs = tasks_qs.filter(user=self.request.user)
+
+        # day_map[day] = {uid: {name, color, total, done}}
+        day_map: dict = {}
+        for t in tasks_qs:
+            d, uid = t.start_date.day, t.user_id
+            day_map.setdefault(d, {})
+            if uid not in day_map[d]:
+                day_map[d][uid] = {
+                    'name':  t.user.get_full_name() or t.user.username,
+                    'color': user_color.get(uid, '#6c757d'),
+                    'total': 0, 'done': 0,
+                }
+            day_map[d][uid]['total'] += 1
+            if t.status == 'done':
+                day_map[d][uid]['done'] += 1
+
+        import json
+        day_dots_json = json.dumps({
+            d: list(v.values()) for d, v in day_map.items()
+        })
+
+        ctx.update({
+            'year': year, 'month': month,
+            'prev_year': prev_year, 'prev_month': prev_month,
+            'next_year': next_year, 'next_month': next_month,
+            'cal': cal, 'today': today,
+            'day_dots_json': day_dots_json,
+            'selected_date': self.request.GET.get('selected', ''),
+            'mode': mode,
+        })
+        return ctx
+
+
+@login_required
+def task_day_tasks(request, date_str):
+    """AJAX: 특정 날짜의 투두 목록 반환 (mode=team|personal)"""
+    if _require_operations(request):
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    try:
+        target_date = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        return JsonResponse({'error': 'invalid date'}, status=400)
+
+    mode = request.GET.get('mode', 'team')
+
+    tasks_qs = (
+        DailyTask.objects
+        .filter(start_date=target_date, user__organization='operations')
+        .select_related('user')
+        .prefetch_related('subtasks')
+        .order_by('user__last_name', 'user__username', 'status', '-created_at')
+    )
+    if mode == 'personal':
+        tasks_qs = tasks_qs.filter(user=request.user)
+
+    my_tasks, team_tasks = [], []
+    for t in tasks_qs:
+        subtasks = [
+            {'pk': st.pk, 'title': st.title, 'is_done': st.is_done}
+            for st in t.subtasks.all()
+        ]
+        item = {
+            'pk': t.pk,
+            'task_name': t.task_name,
+            'progress': t.progress,
+            'status': t.status,
+            'status_display': t.get_status_display(),
+            'note': t.note,
+            'user_name': t.user.get_full_name() or t.user.username,
+            'subtasks': subtasks,
+        }
+        (my_tasks if t.user_id == request.user.pk else team_tasks).append(item)
+
+    return JsonResponse({'my_tasks': my_tasks, 'team_tasks': team_tasks})
 
 
 class TaskManagerReportView(ManagerRequiredMixin, TemplateView):
@@ -438,7 +645,7 @@ def task_weekly_pdf(request):
 
 # ── 용산어린이정원 일일보고 ────────────────────────────────────────
 
-class IntegratedDailyReportView(ManagerRequiredMixin, TemplateView):
+class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
     """날짜별 운영데이터 입력 + 미리보기 페이지"""
     template_name = 'reports/integrated_daily.html'
 
@@ -450,13 +657,18 @@ class IntegratedDailyReportView(ManagerRequiredMixin, TemplateView):
             return timezone.localdate()
 
     def get_context_data(self, **kwargs):
+        from .weather import fetch_tomorrow_weather
         ctx = super().get_context_data(**kwargs)
         target_date = self._get_date()
         ops = OperationsDailyData.objects.filter(report_date=target_date).first()
-        ctx['target_date']  = target_date
-        ctx['prev_date']    = target_date - datetime.timedelta(days=1)
-        ctx['next_date']    = target_date + datetime.timedelta(days=1)
-        ctx['ops']          = ops
+        prev_date = target_date - datetime.timedelta(days=1)
+        prev_ops = OperationsDailyData.objects.filter(report_date=prev_date).first()
+        ctx['target_date']       = target_date
+        ctx['prev_date']         = prev_date
+        ctx['next_date']         = target_date + datetime.timedelta(days=1)
+        ctx['ops']               = ops
+        ctx['yesterday_total']   = prev_ops.today_total if prev_ops else 0
+        ctx['weather_auto']      = fetch_tomorrow_weather(target_date)
         return ctx
 
     def post(self, request):
@@ -476,10 +688,10 @@ class IntegratedDailyReportView(ManagerRequiredMixin, TemplateView):
         ops.main_gate_walk   = _int('main_gate_walk')
         ops.sub_gate_walk    = _int('sub_gate_walk')
         ops.car_visit        = _int('car_visit')
-        ops.yesterday_total  = _int('yesterday_total')
-        ops.tomorrow_temp_min = _int('tomorrow_temp_min')
-        ops.tomorrow_temp_max = _int('tomorrow_temp_max')
-        ops.tomorrow_rain_pct = _int('tomorrow_rain_pct')
+        # 전일 입장 총수: 전날 today_total 자동 참조
+        prev_ops = OperationsDailyData.objects.filter(
+            report_date=target_date - datetime.timedelta(days=1)).first()
+        ops.yesterday_total = prev_ops.today_total if prev_ops else 0
         ops.facility_interior = request.POST.get('facility_interior', '').strip()
         ops.facility_outdoor  = request.POST.get('facility_outdoor', '').strip()
         ops.facility_fountain = request.POST.get('facility_fountain', '').strip()
@@ -657,7 +869,7 @@ def _gather_integrated_data(target_date):
 @login_required
 def integrated_daily_pdf(request):
     """용산어린이정원 일일보고 PDF 다운로드 (WeasyPrint)"""
-    if _require_operations(request) or request.user.role != 'manager':
+    if _require_operations(request):
         return redirect('main_menu')
 
     date_str = request.GET.get('date')
@@ -695,7 +907,7 @@ def integrated_daily_pdf(request):
 @login_required
 def integrated_daily_hwp(request):
     """용산어린이정원 일일보고 한글파일 다운로드"""
-    if _require_operations(request) or request.user.role != 'manager':
+    if _require_operations(request):
         return redirect('main_menu')
 
     date_str = request.GET.get('date')
@@ -706,10 +918,27 @@ def integrated_daily_hwp(request):
 
     data = _gather_integrated_data(target_date)
 
+    from .weather import fetch_tomorrow_weather
+    ops = data['ops_data']
+    if ops is None:
+        ops = OperationsDailyData(report_date=target_date)
+
+    # 전일 입장 총수 자동 참조
+    prev_ops = OperationsDailyData.objects.filter(
+        report_date=target_date - datetime.timedelta(days=1)).first()
+    ops.yesterday_total = prev_ops.today_total if prev_ops else 0
+
+    # 명일 기상 항상 API에서 자동 조회
+    weather = fetch_tomorrow_weather(target_date)
+    if weather:
+        ops.tomorrow_temp_min = weather['temp_min']
+        ops.tomorrow_temp_max = weather['temp_max']
+        ops.tomorrow_rain_pct = weather['rain_pct']
+
     from .hwpx_report import build_integrated_daily_hwpx
     hwpx_bytes = build_integrated_daily_hwpx(
         target_date        = target_date,
-        ops                = data['ops_data'],
+        ops                = ops,
         sf_slots           = data['sf_slots'],
         eoulrim            = data['eoulrim_report'],
         jamjam             = data['jamjam_report'],

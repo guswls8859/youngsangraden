@@ -1,0 +1,498 @@
+{% extends 'base.html' %}
+{% block title %}업무 캘린더 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<!-- 상단 -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">
+        {% if mode == 'team' %}
+        <i class="bi bi-people-fill text-primary"></i> 전체 일정
+        {% else %}
+        <i class="bi bi-person-fill text-success"></i> 개인 업무
+        {% endif %}
+    </h4>
+    <div class="d-flex gap-2">
+        <a href="{% url 'reports:integrated_daily' %}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-file-earmark-text"></i> 용산어린이정원 일일보고
+        </a>
+        {% if request.user.role == 'manager' %}
+        <a href="{% url 'reports:task_report' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-clipboard-data"></i> 일일 업무보고
+        </a>
+        <a href="{% url 'reports:task_weekly_report' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-graph-up"></i> 주간 보고
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 월 네비게이션 -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="?mode={{ mode }}&year={{ prev_year }}&month={{ prev_month }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> 이전 달
+            </a>
+            <span class="fw-bold fs-5">{{ year }}년 {{ month }}월</span>
+            <a href="?mode={{ mode }}&year={{ next_year }}&month={{ next_month }}" class="btn btn-sm btn-outline-secondary">
+                다음 달 <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 캘린더 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body p-2">
+        <table class="table table-bordered mb-0 task-cal">
+            <thead class="table-light text-center">
+                <tr>
+                    <th class="text-danger">일</th>
+                    <th>월</th><th>화</th><th>수</th><th>목</th><th>금</th>
+                    <th class="text-primary">토</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for week in cal %}
+            <tr>
+                {% for day in week %}
+                {% if day == 0 %}
+                <td class="bg-light"></td>
+                {% else %}
+                <td class="task-day {% if day == today.day and year == today.year and month == today.month %}today-cell{% endif %}"
+                    data-date="{{ year }}-{{ month|stringformat:'02d' }}-{{ day|stringformat:'02d' }}">
+                    <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}">
+                        {{ day }}
+                    </div>
+                    <div class="cal-names" data-day="{{ day }}"></div>
+                </td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 업무 목록 모달 -->
+<div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold" id="modalDateLabel"></h6>
+                {% if mode == 'team' %}
+                <span class="badge bg-primary ms-2" style="font-size:.7rem"><i class="bi bi-people-fill"></i> 전체 일정</span>
+                {% else %}
+                <span class="badge bg-success ms-2" style="font-size:.7rem"><i class="bi bi-person-fill"></i> 개인 업무</span>
+                {% endif %}
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* ── 캘린더 테이블 ── */
+.task-cal { table-layout: fixed; }
+.task-cal td, .task-cal th { width: calc(100%/7); }
+.task-day { vertical-align: top; padding: 6px; height: 120px; cursor: pointer; transition: background .12s; }
+.task-day:hover { background-color: #f0f4ff; }
+.today-cell { background-color: #fff9e6 !important; }
+.today-cell:hover { background-color: #fdf3c8 !important; }
+
+/* 날짜 숫자 원형 뱃지 */
+.day-num {
+    font-size: 0.82rem; font-weight: 700; margin-bottom: 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.day-num:hover { background-color: #0d6efd; color: #fff !important; }
+
+/* 이름 태그 블록 (sf-item 스타일) */
+.cal-names { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.cal-name-tag {
+    border-radius: 3px; font-size: 0.7rem; overflow: hidden; cursor: pointer;
+    padding: 2px 5px; font-weight: 600; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: block; line-height: 1.4;
+}
+.cal-name-tag.partial { opacity: 0.45; }
+
+/* ── 모달 내 카드 ── */
+.task-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+.task-card.done-card { background: #f8f9fa; opacity: 0.75; }
+.task-name { font-weight: 600; font-size: 0.9rem; }
+.task-note { font-size: 0.78rem; color: #6c757d; margin-top: 2px; }
+.progress-wrap { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.progress-wrap input[type=range] { flex: 1; }
+.progress-val { font-size: 0.78rem; width: 34px; text-align: right; color: #555; flex-shrink: 0; }
+.task-actions { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.status-badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+.badge-doing  { background: #cfe2ff; color: #084298; }
+.badge-hold   { background: #fff3cd; color: #664d03; }
+.badge-done   { background: #d1e7dd; color: #0a3622; }
+.team-user-header { font-size: 0.78rem; font-weight: 700; color: #6c757d;
+                    border-bottom: 1px solid #f0f0f0; padding-bottom: 3px; margin: 10px 0 6px; }
+.add-form-wrap { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-top: 8px; }
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF           = '{{ csrf_token }}';
+const DAY_DOTS       = {{ day_dots_json|safe }};
+const MODE           = '{{ mode }}';
+const CREATE_URL     = "{% url 'reports:task_create' %}";
+const PROGRESS_BASE  = "/reports/tasks/";
+const STATUS_BASE    = "/reports/tasks/";
+const DELETE_BASE    = "/reports/tasks/";
+const SUBTASK_BASE   = "/reports/subtasks/";
+const SUBTASK_CREATE = "/reports/tasks/";
+
+let selectedDate = '';
+const taskModal  = new bootstrap.Modal(document.getElementById('taskModal'));
+
+// ── 이름 태그 렌더링 ─────────────────────────────────────
+function renderDots() {
+    document.querySelectorAll('.cal-names').forEach(el => {
+        const day   = String(el.dataset.day);
+        const users = DAY_DOTS[day];
+        if (!users) return;
+        users.forEach(u => {
+            const tag = document.createElement('span');
+            tag.className = 'cal-name-tag' + (u.done < u.total ? ' partial' : '');
+            tag.style.background = u.color;
+            tag.title = `${u.name} (${u.done}/${u.total} 완료)`;
+            tag.textContent = u.name.length <= 3 ? u.name : u.name.slice(0, 3);
+            el.appendChild(tag);
+        });
+    });
+}
+
+// ── 날짜 셀 클릭 → 모달 ──────────────────────────────────
+document.querySelectorAll('.task-day').forEach(cell => {
+    cell.addEventListener('click', () => {
+        selectedDate = cell.dataset.date;
+        openModal(selectedDate);
+    });
+});
+
+function openModal(dateStr) {
+    document.getElementById('modalDateLabel').textContent = formatDateLabel(dateStr);
+    document.getElementById('modalBody').innerHTML =
+        '<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-secondary"></div></div>';
+    taskModal.show();
+    fetch(`/reports/calendar/${dateStr}/tasks/?mode=${MODE}`, { headers: { 'X-CSRFToken': CSRF } })
+        .then(r => r.json())
+        .then(data => renderPanel(data, dateStr))
+        .catch(() => {
+            document.getElementById('modalBody').innerHTML = '<p class="text-danger">불러오기 실패</p>';
+        });
+}
+
+function formatDateLabel(d) {
+    const [y, m, day] = d.split('-');
+    return `${y}년 ${parseInt(m)}월 ${parseInt(day)}일`;
+}
+
+// ── 패널 렌더링 ──────────────────────────────────────────
+function renderPanel(data, dateStr) {
+    const isPersonal = MODE === 'personal';
+    let html = '';
+
+    const myLabel = isPersonal
+        ? `<i class="bi bi-person-fill text-success"></i> 개인 업무`
+        : `<i class="bi bi-person-fill"></i> 내 업무`;
+
+    html += `<div class="mb-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold" style="font-size:.9rem">${myLabel}</span>
+        <button class="btn btn-sm ${isPersonal ? 'btn-success' : 'btn-primary'}" style="font-size:.75rem" id="toggleAddForm">
+            <i class="bi bi-plus"></i> 업무 추가
+        </button>
+    </div>`;
+
+    html += `<div class="add-form-wrap d-none" id="addFormWrap">
+        <input type="hidden" id="af_date" value="${dateStr}">
+        <div class="mb-2">
+            <input type="text" id="af_name" class="form-control form-control-sm" placeholder="업무명 *" maxlength="300">
+        </div>
+        <div class="mb-2">
+            <textarea id="af_note" class="form-control form-control-sm" rows="2" placeholder="비고 (선택)"></textarea>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm flex-fill" id="af_saveBtn">저장</button>
+            <button class="btn btn-outline-secondary btn-sm" id="af_cancelBtn">취소</button>
+        </div>
+    </div>`;
+
+    if (data.my_tasks.length === 0) {
+        html += '<p class="text-muted small mt-2 mb-0">등록된 업무가 없습니다.</p>';
+    } else {
+        data.my_tasks.forEach(t => { html += renderMyTask(t); });
+    }
+
+    if (!isPersonal && data.team_tasks.length > 0) {
+        html += `<div class="team-user-header mt-3"><i class="bi bi-people-fill"></i> 팀 업무 현황</div>`;
+        const byUser = {};
+        data.team_tasks.forEach(t => {
+            if (!byUser[t.user_name]) byUser[t.user_name] = [];
+            byUser[t.user_name].push(t);
+        });
+        Object.entries(byUser).forEach(([name, tasks]) => {
+            html += `<div class="team-user-header">${name}</div>`;
+            tasks.forEach(t => { html += renderTeamTask(t); });
+        });
+    }
+
+    document.getElementById('modalBody').innerHTML = html;
+    bindPanelEvents(dateStr);
+}
+
+function statusBadge(t) {
+    const cls = { doing: 'badge-doing', hold: 'badge-hold', done: 'badge-done' }[t.status] || '';
+    return `<span class="status-badge ${cls}">${t.status_display}</span>`;
+}
+
+function renderSubtaskList(t, editable) {
+    let html = '<div class="subtask-list mt-2">';
+    (t.subtasks || []).forEach(st => {
+        const titleCls = st.is_done ? 'text-decoration-line-through text-muted' : '';
+        if (editable) {
+            html += `<div class="d-flex align-items-center gap-2 py-1 border-bottom border-light">
+                <input type="checkbox" class="form-check-input subtask-check" data-pk="${st.pk}" ${st.is_done ? 'checked' : ''} style="cursor:pointer">
+                <span class="${titleCls}" style="font-size:.82rem;flex:1">${escHtml(st.title)}</span>
+                <button class="btn btn-link btn-sm text-danger p-0 subtask-del-btn" data-pk="${st.pk}" title="삭제"><i class="bi bi-x-lg" style="font-size:.65rem"></i></button>
+            </div>`;
+        } else {
+            html += `<div class="d-flex align-items-center gap-2 py-1">
+                <input type="checkbox" class="form-check-input" ${st.is_done ? 'checked' : ''} disabled>
+                <span class="${titleCls}" style="font-size:.82rem">${escHtml(st.title)}</span>
+            </div>`;
+        }
+    });
+    html += '</div>';
+    if (editable) {
+        html += `<div class="mt-1">
+            <button class="btn btn-link btn-sm p-0 add-subtask-btn" data-task-pk="${t.pk}" style="font-size:.75rem;color:#6c757d">
+                <i class="bi bi-plus-circle"></i> 서브 업무 추가
+            </button>
+            <div class="subtask-add-form d-none mt-1" id="stform_${t.pk}">
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control st-input" placeholder="서브 업무명" maxlength="300">
+                    <button class="btn btn-primary st-save-btn" data-task-pk="${t.pk}">추가</button>
+                </div>
+            </div>
+        </div>`;
+    }
+    return html;
+}
+
+function renderMyTask(t) {
+    const noteHtml = t.note ? `<div class="task-note">${escHtml(t.note)}</div>` : '';
+    const hasSubtasks = t.subtasks && t.subtasks.length > 0;
+
+    // 서브 업무 있으면 자동 진행률 바, 없으면 수동 슬라이더
+    const progressHtml = hasSubtasks
+        ? `<div class="progress-wrap">
+            <div class="progress flex-fill" style="height:8px">
+                <div class="progress-bar ${t.progress === 100 ? 'bg-success' : ''}" style="width:${t.progress}%"></div>
+            </div>
+            <span class="progress-val">${t.progress}%</span>
+           </div>`
+        : `<div class="progress-wrap">
+            <input type="range" min="0" max="100" value="${t.progress}" class="my-progress-slider" data-pk="${t.pk}">
+            <span class="progress-val">${t.progress}%</span>
+           </div>`;
+
+    return `<div class="task-card ${t.status === 'done' ? 'done-card' : ''}" data-pk="${t.pk}">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="task-name">${escHtml(t.task_name)}</div>
+            ${statusBadge(t)}
+        </div>
+        ${noteHtml}
+        ${progressHtml}
+        <div class="subtask-section">${renderSubtaskList(t, true)}</div>
+        <div class="task-actions mt-2">
+            ${t.status !== 'doing' ? `<button class="btn btn-outline-secondary btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="doing" style="font-size:.72rem">진행중</button>` : ''}
+            ${t.status !== 'hold'  ? `<button class="btn btn-outline-warning  btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="hold"  style="font-size:.72rem">보류</button>` : ''}
+            ${t.status !== 'done'  ? `<button class="btn btn-outline-success  btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="done"  style="font-size:.72rem">완료</button>` : ''}
+            <button class="btn btn-outline-danger btn-sm py-0 del-btn ms-auto" data-pk="${t.pk}" style="font-size:.72rem">삭제</button>
+        </div>
+    </div>`;
+}
+
+function renderTeamTask(t) {
+    const noteHtml = t.note ? `<div class="task-note">${escHtml(t.note)}</div>` : '';
+    return `<div class="task-card ${t.status === 'done' ? 'done-card' : ''}">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="task-name">${escHtml(t.task_name)}</div>
+            ${statusBadge(t)}
+        </div>
+        ${noteHtml}
+        ${t.subtasks && t.subtasks.length > 0 ? renderSubtaskList(t, false) : ''}
+        <div class="progress-wrap">
+            <div class="progress flex-fill" style="height:6px">
+                <div class="progress-bar" style="width:${t.progress}%"></div>
+            </div>
+            <span class="progress-val">${t.progress}%</span>
+        </div>
+    </div>`;
+}
+
+function bindPanelEvents(dateStr) {
+    document.getElementById('toggleAddForm')?.addEventListener('click', () => {
+        document.getElementById('addFormWrap').classList.toggle('d-none');
+        document.getElementById('af_name').focus();
+    });
+    document.getElementById('af_cancelBtn')?.addEventListener('click', () => {
+        document.getElementById('addFormWrap').classList.add('d-none');
+    });
+    document.getElementById('af_saveBtn')?.addEventListener('click', () => {
+        const name = document.getElementById('af_name').value.trim();
+        const note = document.getElementById('af_note').value.trim();
+        if (!name) { alert('업무명을 입력해주세요.'); return; }
+        fetch(CREATE_URL, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest' },
+            body: new URLSearchParams({ task_name: name, note, start_date: dateStr, status: 'doing', progress: 0 }),
+        })
+        .then(r => r.json())
+        .then(d => { if (d.ok) openModal(dateStr); else alert('저장 실패'); });
+    });
+    document.querySelectorAll('.my-progress-slider').forEach(slider => {
+        slider.addEventListener('input', () => {
+            slider.nextElementSibling.textContent = slider.value + '%';
+        });
+        slider.addEventListener('change', () => {
+            fetch(`${PROGRESS_BASE}${slider.dataset.pk}/progress/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest' },
+                body: new URLSearchParams({ progress: slider.value }),
+            })
+            .then(r => r.json())
+            .then(() => openModal(selectedDate));
+        });
+    });
+    document.querySelectorAll('.status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            fetch(`${STATUS_BASE}${btn.dataset.pk}/status/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest' },
+                body: new URLSearchParams({ status: btn.dataset.status }),
+            })
+            .then(r => r.json())
+            .then(() => openModal(selectedDate));
+        });
+    });
+    document.querySelectorAll('.del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('이 업무를 삭제하시겠습니까?')) return;
+            fetch(`${DELETE_BASE}${btn.dataset.pk}/delete/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' },
+            })
+            .then(r => r.json())
+            .then(() => openModal(selectedDate));
+        });
+    });
+
+    // ── 서브 업무 이벤트 ──────────────────────────────────────
+    document.querySelectorAll('.subtask-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+            fetch(`${SUBTASK_BASE}${cb.dataset.pk}/toggle/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' },
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) return;
+                // 서브 업무 제목 취소선 토글
+                const row = cb.closest('.d-flex');
+                const titleSpan = row.querySelector('span');
+                if (data.is_done) {
+                    titleSpan.classList.add('text-decoration-line-through', 'text-muted');
+                } else {
+                    titleSpan.classList.remove('text-decoration-line-through', 'text-muted');
+                }
+                // 부모 업무 카드 업데이트
+                const taskCard = cb.closest('.task-card');
+                const progressBar = taskCard.querySelector('.progress-bar');
+                const progressVal = taskCard.querySelector('.progress-val');
+                if (progressBar) {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressBar.classList.toggle('bg-success', data.progress === 100);
+                }
+                if (progressVal) progressVal.textContent = `${data.progress}%`;
+                // 상태 뱃지 업데이트
+                const badge = taskCard.querySelector('.status-badge');
+                if (badge) {
+                    badge.className = `status-badge badge-${data.status}`;
+                    badge.textContent = data.status_display;
+                }
+                taskCard.classList.toggle('done-card', data.progress === 100);
+            });
+        });
+    });
+
+    document.querySelectorAll('.add-subtask-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const form = document.getElementById(`stform_${btn.dataset.taskPk}`);
+            form.classList.toggle('d-none');
+            if (!form.classList.contains('d-none')) {
+                form.querySelector('.st-input').focus();
+            }
+        });
+    });
+
+    document.querySelectorAll('.st-save-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const taskPk = btn.dataset.taskPk;
+            const input = btn.previousElementSibling;
+            const title = input.value.trim();
+            if (!title) { input.focus(); return; }
+            fetch(`${SUBTASK_CREATE}${taskPk}/subtasks/create/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': CSRF,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new URLSearchParams({ title }),
+            })
+            .then(r => r.json())
+            .then(d => { if (d.ok) openModal(selectedDate); });
+        });
+    });
+
+    document.querySelectorAll('.subtask-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('서브 업무를 삭제하시겠습니까?')) return;
+            fetch(`${SUBTASK_BASE}${btn.dataset.pk}/delete/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' },
+            })
+            .then(r => r.json())
+            .then(d => { if (d.ok) openModal(selectedDate); });
+        });
+    });
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+renderDots();
+</script>
+{% endblock %}
+

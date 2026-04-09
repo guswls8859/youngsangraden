@@ -96,6 +96,40 @@ class DailyTask(models.Model):
             self.status = 'doing'
         super().save(*args, **kwargs)
 
+    def recalculate_progress(self):
+        """서브 업무 기반으로 진행도 자동 계산 후 저장"""
+        subtasks = self.subtasks.all()
+        if not subtasks.exists():
+            return
+        total = subtasks.count()
+        done = subtasks.filter(is_done=True).count()
+        progress = int(done / total * 100)
+        status = self.status
+        if progress == 100:
+            status = 'done'
+        elif status == 'done' and progress < 100:
+            status = 'doing'
+        DailyTask.objects.filter(pk=self.pk).update(progress=progress, status=status)
+
+
+class SubTask(models.Model):
+    daily_task = models.ForeignKey(
+        DailyTask, on_delete=models.CASCADE,
+        related_name='subtasks', verbose_name='메인 업무'
+    )
+    title = models.CharField(max_length=300, verbose_name='서브 업무명')
+    is_done = models.BooleanField(default=False, verbose_name='완료 여부')
+    order = models.PositiveIntegerField(default=0, verbose_name='순서')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '서브 업무'
+        verbose_name_plural = '서브 업무 목록'
+        ordering = ['order', 'created_at']
+
+    def __str__(self):
+        return f'{self.daily_task.task_name} > {self.title}'
+
 
 class OperationsDailyData(models.Model):
     """용산어린이정원 일일보고 - 수기 입력 항목"""
