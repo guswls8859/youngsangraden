@@ -69,7 +69,7 @@ DATABASES = {
         'USER': 'root',
         'PASSWORD': '1235gg',
         'HOST': 'svc.sel3.cloudtype.app',
-        'PORT': '30414',
+        'PORT': '30943',
     }
     # 'default': {
     #     'ENGINE': 'django.db.backends.sqlite3',
