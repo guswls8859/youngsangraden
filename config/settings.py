@@ -66,10 +66,10 @@ DATABASES = {
     'default':{
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'yongsan_garden',
-        'USER': 'postgres',
+        'USER': 'root',
         'PASSWORD': '1235gg',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'HOST': 'svc.sel3.cloudtype.app',
+        'PORT': '30414',
     }
     # 'default': {
     #     'ENGINE': 'django.db.backends.sqlite3',
