@@ -6,6 +6,7 @@ app_name = 'sportsfield'
 urlpatterns = [
     path('', views.SportsfieldMainView.as_view(), name='main'),
     path('usage/', views.SportsfieldUsageView.as_view(), name='usage'),
+    path('cancel/', views.SportsfieldCancelView.as_view(), name='cancel'),
     path('refresh/', views.ScrapeRefreshView.as_view(), name='refresh'),
     path('reservation/<int:rv_no>/', views.ReservationDetailView.as_view(), name='reservation_detail'),
     path('entry/create/', views.EntryCreateView.as_view(), name='entry_create'),

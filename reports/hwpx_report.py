@@ -156,6 +156,7 @@ def build_integrated_daily_hwpx(
     p_family      = _v(ops, 'parking_family')
     p_dis         = _v(ops, 'parking_disabled')
     p_preg        = _v(ops, 'parking_pregnant')
+    p_children    = _v(ops, 'parking_children')
 
     yesterday     = _v(ops, 'yesterday_total')
     temp_min      = _v(ops, 'tomorrow_temp_min')
@@ -286,9 +287,22 @@ def build_integrated_daily_hwpx(
     cells_r10 = rows[10].findall('hp:tc', NS)
     _set_cell_lines(cells_r10[1], fac_fountain)
 
-    # ── Row 11: 편익시설 매출 (중첩 테이블) ───────────────────────────────────
+    # ── Row 11: 주차장 (중첩 테이블) ─────────────────────────────────────────
     cells_r11 = rows[11].findall('hp:tc', NS)
-    inner_sales = cells_r11[1].find('.//hp:tbl', NS)
+    inner_parking = cells_r11[1].find('.//hp:tbl', NS)
+    if inner_parking is not None:
+        park_rows = inner_parking.findall('hp:tr', NS)
+        if len(park_rows) >= 2:
+            dc = park_rows[1].findall('hp:tc', NS)
+            if len(dc) >= 4:
+                _set_t(dc[0], str(p_family))
+                _set_t(dc[1], str(p_dis))
+                _set_t(dc[2], str(p_preg))
+                _set_t(dc[3], str(p_children))
+
+    # ── Row 12: 편익시설 매출 (중첩 테이블) ───────────────────────────────────
+    cells_r12 = rows[12].findall('hp:tc', NS)
+    inner_sales = cells_r12[1].find('.//hp:tbl', NS)
     if inner_sales is not None:
         sal_rows = inner_sales.findall('hp:tr', NS)
         if len(sal_rows) >= 2:
@@ -298,17 +312,37 @@ def build_integrated_daily_hwpx(
                 _set_t(dc[1], _fmt_sales(jamjam_s))
                 _set_t(dc[2], _fmt_sales(kumnare_s))
 
-    # ── Row 12: 내부행사/프로그램 ─────────────────────────────────────────────
-    cells_r12 = rows[12].findall('hp:tc', NS)
-    _set_cell_lines(cells_r12[1], evt_internal)
-
-    # ── Row 13: 외부행사 ──────────────────────────────────────────────────────
+    # ── Row 13: 내부행사/프로그램 ─────────────────────────────────────────────
     cells_r13 = rows[13].findall('hp:tc', NS)
-    _set_cell_lines(cells_r13[1], evt_external)
+    _set_cell_lines(cells_r13[1], evt_internal)
 
-    # ── Row 14: 특이사항 ──────────────────────────────────────────────────────
+    # ── Row 14: 외부행사 ──────────────────────────────────────────────────────
     cells_r14 = rows[14].findall('hp:tc', NS)
-    _set_cell_lines(cells_r14[1], special)
+    _set_cell_lines(cells_r14[1], evt_external)
+
+    # ── Row 15: 특이사항 ──────────────────────────────────────────────────────
+    # cell1에 '○ 세부 이용현황' 단락과 내부 테이블이 있으므로
+    # 특이사항 텍스트를 그 앞에 삽입한다
+    cells_r15 = rows[15].findall('hp:tc', NS)
+    c15 = cells_r15[1]
+    sl15 = c15.find('hp:subList', NS)
+    if sl15 is not None and special:
+        existing15 = sl15.findall('hp:p', NS)
+        first_p15 = existing15[0] if existing15 else None
+        paraPr15 = first_p15.get('paraPrIDRef', '0') if first_p15 else '0'
+        first_run15 = first_p15.find('hp:run', NS) if first_p15 else None
+        charPr15 = first_run15.get('charPrIDRef', '0') if first_run15 else '0'
+        children15 = list(sl15)
+        insert_idx = children15.index(existing15[0]) if existing15 else len(children15)
+        for i, line in enumerate(special.split('\n')):
+            new_p = ET.Element(f'{{{HP}}}p', {
+                'id': '0', 'paraPrIDRef': paraPr15, 'styleIDRef': '0',
+                'pageBreak': '0', 'columnBreak': '0', 'merged': '0',
+            })
+            new_run = ET.SubElement(new_p, f'{{{HP}}}run', {'charPrIDRef': charPr15})
+            new_t = ET.SubElement(new_run, f'{{{HP}}}t')
+            new_t.text = line or None
+            sl15.insert(insert_idx + i, new_p)
 
     # 3. section0.xml 직렬화
     xml_decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'

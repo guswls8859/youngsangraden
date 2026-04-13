@@ -26,6 +26,9 @@
         <a class="nav-link" href="{% url 'sportsfield:usage' %}?year={{ year }}&month={{ month }}">이용현황</a>
     </li>
     <li class="nav-item">
+        <a class="nav-link" href="{% url 'sportsfield:cancel' %}?year={{ year }}&month={{ month }}">취소현황</a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link" href="{% url 'eventhouse:main' %}?year={{ year }}&month={{ month }}">이벤트하우스 및 일정</a>
     </li>
 </ul>

@@ -199,6 +199,33 @@
         </div>
     </div>
 
+    <!-- 편익시설 매출 -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header fw-semibold bg-light">
+            <i class="bi bi-shop"></i> 편익시설 매출
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-bordered mb-0 text-center" style="font-size:.9rem">
+                <thead class="table-light">
+                    <tr>
+                        <th>카페어울림</th>
+                        <th>잼잼카페</th>
+                        <th>꿈나래마켓</th>
+                        <th class="table-secondary">합계</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{% if eoulrim_report %}{{ eoulrim_report.daily_net_sales|default:0 }}원{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                        <td>{% if jamjam_report %}{{ jamjam_report.daily_net_sales|default:0 }}원{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                        <td>{% if kumnare_report %}{{ kumnare_report.sales_amount|default:0 }}원{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                        <td class="fw-bold table-secondary">{{ total_sales|default:0 }}원</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- 자동 수집 안내 -->
     <div class="alert alert-light border small mb-3">
         <i class="bi bi-info-circle text-primary"></i>

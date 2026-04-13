@@ -197,6 +197,49 @@ class SportsfieldUsageView(SportsfieldAccessMixin, TemplateView):
         return ctx
 
 
+class SportsfieldCancelView(SportsfieldAccessMixin, TemplateView):
+    template_name = 'sportsfield/cancel.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        year, month = _get_year_month(self.request)
+        prev_year, prev_month, next_year, next_month = _prev_next(year, month)
+
+        cancelled = Reservation.objects.filter(
+            reservation_date__year=year,
+            reservation_date__month=month,
+            status='cancelled',
+        )
+
+        field_calendars = {}
+        for field_key, field_label in FIELD_CHOICES:
+            cal, day_map = _build_calendar(
+                year, month,
+                cancelled.filter(field_type=field_key),
+                SportsfieldEntry.objects.none(),
+            )
+            field_calendars[field_key] = {
+                'label': field_label,
+                'cal': cal,
+                'day_map': day_map,
+                'count': cancelled.filter(field_type=field_key).count(),
+            }
+
+        ctx.update({
+            'year': year,
+            'month': month,
+            'prev_year': prev_year,
+            'prev_month': prev_month,
+            'next_year': next_year,
+            'next_month': next_month,
+            'fields': FIELD_CHOICES,
+            'field_calendars': field_calendars,
+            'today': date.today(),
+            'total_count': cancelled.count(),
+        })
+        return ctx
+
+
 class ScrapeRefreshView(SportsfieldAccessMixin, View):
     def post(self, request, *args, **kwargs):
         try:

@@ -789,12 +789,17 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         ops = OperationsDailyData.objects.filter(report_date=target_date).first()
         prev_date = target_date - datetime.timedelta(days=1)
         prev_ops = OperationsDailyData.objects.filter(report_date=prev_date).first()
+        integrated = _gather_integrated_data(target_date)
         ctx['target_date']       = target_date
         ctx['prev_date']         = prev_date
         ctx['next_date']         = target_date + datetime.timedelta(days=1)
         ctx['ops']               = ops
         ctx['yesterday_total']   = prev_ops.today_total if prev_ops else 0
         ctx['weather_auto']      = fetch_tomorrow_weather(target_date)
+        ctx['eoulrim_report']    = integrated['eoulrim_report']
+        ctx['jamjam_report']     = integrated['jamjam_report']
+        ctx['kumnare_report']    = integrated['kumnare_report']
+        ctx['total_sales']       = integrated['total_sales']
         return ctx
 
     def post(self, request):

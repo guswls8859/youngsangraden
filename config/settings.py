@@ -71,22 +71,22 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
-    #  'default':{
-    #     'ENGINE': 'django.db.backends.postgresql',
-    #     'NAME': 'yongsan_garden',
-    #     'USER': 'postgres',
-    #     'PASSWORD': '1235gg',
-    #     'HOST': 'localhost',
-    #     'PORT': '5432',
-    # }
-    'default':{
+     'default':{
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'yongsan_garden',
-        'USER': 'root',
+        'USER': 'postgres',
         'PASSWORD': '1235gg',
-        'HOST': 'svc.sel3.cloudtype.app',
-        'PORT': '30943',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
+    # 'default':{
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': 'yongsan_garden',
+    #     'USER': 'root',
+    #     'PASSWORD': '1235gg',
+    #     'HOST': 'svc.sel3.cloudtype.app',
+    #     'PORT': '30943',
+    # }
     # 'default': {
     #     'ENGINE': 'django.db.backends.sqlite3',
     #     'NAME': BASE_DIR / 'db.sqlite3',
