@@ -47,24 +47,34 @@
 <!-- GODATA 자동수집 안내 -->
 <div class="alert border small mb-3"
      style="background:#f0f7ff; border-color:#b8d9f0 !important;">
-    <div class="d-flex align-items-start gap-2">
-        <i class="bi bi-people-fill text-primary mt-1"></i>
-        <div>
-            <strong>금일 입장 총수 자동수집 (GODATA 피플카운트)</strong><br>
-            <span class="text-muted">
-                방문자 수(금일 입장 총수)는 GODATA에서 자동으로 가져옵니다.
-                <span class="fw-semibold text-dark">평일 17:30</span>,
-                <span class="fw-semibold text-dark">토요일 20:30</span>에 자동 갱신됩니다.
-            </span>
-            {% if ops and ops.updated_at %}
-            <br>
-            <span class="text-secondary" style="font-size:.8rem;">
-                <i class="bi bi-clock"></i>
-                마지막 저장: {{ ops.updated_at|date:"m/d H:i" }}
-                &nbsp;·&nbsp; 현재 입력값: <strong>{{ ops.today_total|default:0 }}명</strong>
-            </span>
-            {% endif %}
+    <div class="d-flex align-items-start justify-content-between gap-2">
+        <div class="d-flex align-items-start gap-2">
+            <i class="bi bi-people-fill text-primary mt-1"></i>
+            <div>
+                <strong>금일 입장 총수 자동수집 (GODATA 피플카운트)</strong><br>
+                <span class="text-muted">
+                    방문자 수(금일 입장 총수)는 GODATA에서 자동으로 가져옵니다.
+                    <span class="fw-semibold text-dark">평일 17:30</span>,
+                    <span class="fw-semibold text-dark">토요일 20:30</span>에 자동 갱신됩니다.
+                </span>
+                {% if ops and ops.updated_at %}
+                <br>
+                <span class="text-secondary" style="font-size:.8rem;">
+                    <i class="bi bi-clock"></i>
+                    마지막 저장: {{ ops.updated_at|date:"m/d H:i" }}
+                    &nbsp;·&nbsp; 현재 입력값: <strong>{{ ops.today_total|default:0 }}명</strong>
+                </span>
+                {% endif %}
+            </div>
         </div>
+        <form method="post" action="{% url 'reports:godata_manual_fetch' %}" class="flex-shrink-0">
+            {% csrf_token %}
+            <input type="hidden" name="date" value="{{ target_date|date:'Y-m-d' }}">
+            <button type="submit" class="btn btn-sm btn-outline-primary"
+                    onclick="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm\'></span> 수집 중...'; this.form.submit();">
+                <i class="bi bi-arrow-clockwise"></i> 지금 수집
+            </button>
+        </form>
     </div>
 </div>
 
@@ -84,9 +94,13 @@
                 </div>
                 <div class="card-body">
                     <div class="mb-2">
-                        <label class="form-label small fw-medium">입장 총수 (명)</label>
-                        <input type="number" name="today_total" class="form-control form-control-sm"
-                               min="0" value="{{ ops.today_total|default:0 }}">
+                        <label class="form-label small fw-medium">
+                            입장 총수 (명)
+                            <span class="text-muted fw-normal" style="font-size:.75rem;">— GODATA 도보 + 차량방문 자동 합산</span>
+                        </label>
+                        <input type="text" id="id_today_total_display"
+                               class="form-control form-control-sm bg-light fw-bold"
+                               readonly value="{{ ops.today_total|default:0 }}">
                     </div>
                     <div class="row g-2">
                         <div class="col-4">
@@ -101,10 +115,22 @@
                         </div>
                         <div class="col-4">
                             <label class="form-label small fw-medium">차량방문</label>
-                            <input type="number" name="car_visit" class="form-control form-control-sm"
+                            <input type="number" name="car_visit" id="id_car_visit"
+                                   class="form-control form-control-sm"
                                    min="0" value="{{ ops.car_visit|default:0 }}">
                         </div>
                     </div>
+                    <script>
+                    (function(){
+                        const godata = {{ ops.godata_total|default:0 }};
+                        const carInput = document.getElementById('id_car_visit');
+                        const display  = document.getElementById('id_today_total_display');
+                        function update(){
+                            display.value = godata + (parseInt(carInput.value) || 0);
+                        }
+                        carInput.addEventListener('input', update);
+                    })();
+                    </script>
                 </div>
             </div>
 

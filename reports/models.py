@@ -154,7 +154,8 @@ class OperationsDailyData(models.Model):
     report_date = models.DateField(unique=True, verbose_name='보고 날짜')
 
     # 방문현황
-    today_total      = models.PositiveIntegerField(default=0, verbose_name='금일 입장 총수')
+    godata_total     = models.PositiveIntegerField(default=0, verbose_name='GODATA 도보 합계')  # GODATA 원본값
+    today_total      = models.PositiveIntegerField(default=0, verbose_name='금일 입장 총수')    # godata_total + car_visit
     main_gate_walk   = models.PositiveIntegerField(default=0, verbose_name='주출입구 도보')
     sub_gate_walk    = models.PositiveIntegerField(default=0, verbose_name='부출입구 도보')
     car_visit        = models.PositiveIntegerField(default=0, verbose_name='차량방문')

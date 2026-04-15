@@ -151,7 +151,6 @@ def build_integrated_daily_hwpx(
 
     # 1. 데이터 정리
     today_total   = _v(ops, 'today_total')
-    walk          = _v(ops, 'main_gate_walk') + _v(ops, 'sub_gate_walk')
     car_visit     = _v(ops, 'car_visit')
     p_family      = _v(ops, 'parking_family')
     p_dis         = _v(ops, 'parking_disabled')
@@ -205,18 +204,17 @@ def build_integrated_daily_hwpx(
     p0_t = visit_sl.findall('hp:p', NS)[0].find('hp:run/hp:t', NS)
     if p0_t is not None:
         p0_t.text = f"입장 {today_total}명"
-    # 중첩 테이블: 도보/차량/주차 데이터
+    # 중첩 테이블: 주출입구 / 부출입구 / 차량
+    # 템플릿 구조: inner_row0=헤더(3셀), inner_row1=데이터(3셀)
     inner_vtbl = cell_visit.find('.//hp:tbl', NS)
     if inner_vtbl is not None:
         v_rows = inner_vtbl.findall('hp:tr', NS)
-        if len(v_rows) >= 3:
-            dc = v_rows[2].findall('hp:tc', NS)
-            if len(dc) >= 5:
-                _set_t(dc[0], str(walk))
-                _set_t(dc[1], str(car_visit))
-                _set_t(dc[2], str(p_family))
-                _set_t(dc[3], str(p_dis))
-                _set_t(dc[4], str(p_preg))
+        if len(v_rows) >= 2:
+            dc = v_rows[1].findall('hp:tc', NS)
+            if len(dc) >= 3:
+                _set_t(dc[0], str(_v(ops, 'main_gate_walk')))
+                _set_t(dc[1], str(_v(ops, 'sub_gate_walk')))
+                _set_t(dc[2], str(car_visit))
 
     # ── Row 4: 전일 방문현황 / 명일 기상상황 ─────────────────────────────────
     cells_r4 = rows[4].findall('hp:tc', NS)

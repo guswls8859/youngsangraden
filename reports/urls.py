@@ -28,4 +28,5 @@ urlpatterns = [
     path('integrated/', views.IntegratedDailyReportView.as_view(), name='integrated_daily'),
     path('integrated/pdf/', views.integrated_daily_pdf, name='integrated_daily_pdf'),
     path('integrated/hwp/', views.integrated_daily_hwp, name='integrated_daily_hwp'),
+    path('integrated/godata/fetch/', views.godata_manual_fetch, name='godata_manual_fetch'),
 ]

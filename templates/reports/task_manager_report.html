@@ -82,7 +82,7 @@
                     <th class="d-none d-md-table-cell">부서</th>
                     <th class="d-none d-sm-table-cell">진행도</th>
                     <th class="d-none d-lg-table-cell">비고</th>
-                    <th>검토</th>
+                    <th style="width:130px">검토</th>
                 </tr>
             </thead>
             <tbody>
@@ -100,7 +100,7 @@
                         </div>
                     </td>
                     <td class="d-none d-lg-table-cell small text-muted">{{ task.note|default:"-"|truncatechars:50 }}</td>
-                    <td>
+                    <td style="white-space:nowrap">
                         {% if task.is_reviewed %}
                         <div class="d-flex align-items-center gap-1">
                             <span class="badge bg-success" title="{{ task.reviewed_by.get_full_name|default:'' }} {{ task.reviewed_at|date:'m/d H:i' }}">

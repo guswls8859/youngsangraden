@@ -3,6 +3,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
+from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
@@ -840,10 +841,11 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
             except (ValueError, TypeError):
                 return default
 
-        ops.today_total      = _int('today_total')
         ops.main_gate_walk   = _int('main_gate_walk')
         ops.sub_gate_walk    = _int('sub_gate_walk')
         ops.car_visit        = _int('car_visit')
+        # 입장 총수 = GODATA 도보 합계 + 차량방문
+        ops.today_total      = ops.godata_total + ops.car_visit
         # 전일 입장 총수: 전날 today_total 자동 참조
         prev_ops = OperationsDailyData.objects.filter(
             report_date=target_date - datetime.timedelta(days=1)).first()
@@ -861,6 +863,34 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         ops.save()
 
         return redirect(f'/reports/integrated/?date={target_date}')
+
+
+@login_required
+def godata_manual_fetch(request):
+    """GODATA 방문자 수 수동 수집 (UI 버튼에서 호출)."""
+    if _require_operations(request):
+        return redirect('main_menu')
+    if request.method != 'POST':
+        return redirect('reports:integrated_daily')
+
+    date_str = request.POST.get('date')
+    target_date = None
+    if date_str:
+        try:
+            target_date = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            pass
+
+    from .godata_scraper import sync_godata_to_db
+    success = sync_godata_to_db(target_date)
+
+    date_param = f'?date={target_date}' if target_date else ''
+    if success:
+        messages.success(request, 'GODATA 방문자 수 수집이 완료됐습니다.')
+    else:
+        messages.error(request, 'GODATA 수집 실패 — 서버 로그를 확인하세요.')
+
+    return redirect(f'/reports/integrated/{date_param}')
 
 
 def _sf_slot(sf_reservations, sf_entries, field_types, start_time):
