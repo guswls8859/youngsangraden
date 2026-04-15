@@ -55,7 +55,8 @@ def fetch_today_entry_count() -> dict | None:
 
             # ── 대시보드 ──────────────────────────────────────
             if not _try_click(page, '#ext-element-702', '대시보드(ID)'):
-                _click(page, 'text=대시보드', '대시보드(text)')
+                if not _try_force_click(page, 'text=대시보드1', '대시보드(text1)'):
+                    _force_click(page, 'text=대시보드', '대시보드(text)')
             page.wait_for_timeout(3000)
 
             # ── 입장 총수는 시간대별 진입 전에 먼저 읽는다 ───
@@ -66,12 +67,16 @@ def fetch_today_entry_count() -> dict | None:
                 _click(page, 'text=시간대별', '시간대별(text)')
             page.wait_for_timeout(3000)
 
-            # ── 구역비교 체크박스 ─────────────────────────────
-            _click(page, '#O8AD_id-boxLabelEl', '구역비교')
+            # ── 구역비교 체크박스 (동적 ID → 텍스트 기반) ────
+            if not _try_click(page, '#O8AD_id-boxLabelEl', '구역비교(ID)'):
+                if not _try_force_click(page, 'text=구역비교', '구역비교(text)'):
+                    _force_click(page, 'label:has-text("구역비교")', '구역비교(label)')
             page.wait_for_timeout(1000)
 
-            # ── 조회 버튼 ─────────────────────────────────────
-            _click(page, '#O7A8_id-btnEl', '조회')
+            # ── 조회 버튼 (동적 ID → 텍스트 기반) ───────────
+            if not _try_click(page, '#O7A8_id-btnEl', '조회(ID)'):
+                if not _try_force_click(page, 'text=조회', '조회(text)'):
+                    _force_click(page, 'button:has-text("조회")', '조회(button)')
             page.wait_for_timeout(5000)
 
             # ── 구역별 데이터는 조회 후에 읽는다 ─────────────
@@ -191,11 +196,30 @@ def _click(page, selector, label=''):
         logger.warning('%s 클릭 실패: %s', label or selector, e)
 
 
+def _force_click(page, selector, label=''):
+    """force=True 클릭 — 오버레이에 가려진 요소에 사용. 실패 시 WARNING."""
+    try:
+        page.click(selector, timeout=5000, force=True)
+        logger.debug('%s 강제클릭 완료', label or selector)
+    except Exception as e:
+        logger.warning('%s 강제클릭 실패: %s', label or selector, e)
+
+
 def _try_click(page, selector, label='') -> bool:
     """클릭 성공 시 True, 실패 시 False 반환 (예외 없음)."""
     try:
         page.click(selector, timeout=3000)
         logger.debug('%s 클릭 완료', label or selector)
+        return True
+    except Exception:
+        return False
+
+
+def _try_force_click(page, selector, label='') -> bool:
+    """force=True 클릭 시도 — 성공 시 True, 실패 시 False (예외 없음)."""
+    try:
+        page.click(selector, timeout=3000, force=True)
+        logger.debug('%s 강제클릭 완료', label or selector)
         return True
     except Exception:
         return False
