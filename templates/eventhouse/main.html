@@ -10,13 +10,16 @@
 <!-- 상단 메뉴 탭 -->
 <ul class="nav nav-pills mb-3">
     <li class="nav-item">
-        <a class="nav-link" href="{% url 'sportsfield:main' %}?year={{ year }}&month={{ month }}">예약현황</a>
+        <a class="nav-link active" href="{% url 'sportsfield:main' %}?year={{ year }}&month={{ month }}">예약현황</a>
     </li>
     <li class="nav-item">
         <a class="nav-link" href="{% url 'sportsfield:usage' %}?year={{ year }}&month={{ month }}">이용현황</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link active" href="{% url 'eventhouse:main' %}?year={{ year }}&month={{ month }}">이벤트하우스 및 일정</a>
+        <a class="nav-link" href="{% url 'sportsfield:cancel' %}?year={{ year }}&month={{ month }}">취소현황</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{% url 'eventhouse:main' %}?year={{ year }}&month={{ month }}">이벤트하우스 및 일정</a>
     </li>
 </ul>
 

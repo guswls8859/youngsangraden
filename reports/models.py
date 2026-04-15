@@ -79,6 +79,15 @@ class DailyTask(models.Model):
     progress = models.IntegerField(default=0, verbose_name='진행도(%)')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='doing', verbose_name='상태')
     note = models.TextField(blank=True, verbose_name='비고')
+    is_reviewed = models.BooleanField(default=False, verbose_name='검토 완료')
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reviewed_tasks',
+        verbose_name='검토자'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='검토 일시')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -14,6 +14,7 @@ urlpatterns = [
     path('tasks/<int:pk>/status/', views.task_update_status, name='task_status'),
     path('tasks/<int:pk>/edit/', views.task_edit, name='task_edit'),
     path('tasks/<int:pk>/delete/', views.task_delete, name='task_delete'),
+    path('tasks/<int:pk>/review/', views.task_review_toggle, name='task_review'),
     # 서브 업무
     path('tasks/<int:pk>/subtasks/create/', views.subtask_create, name='subtask_create'),
     path('subtasks/<int:pk>/edit/', views.subtask_edit, name='subtask_edit'),

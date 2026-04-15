@@ -359,6 +359,31 @@ def task_delete(request, pk):
     return redirect('reports:task_calendar')
 
 
+@login_required
+def task_review_toggle(request, pk):
+    """관리자 전용: 100% 완료 업무 검토 완료 토글 (AJAX POST)"""
+    if request.user.organization != 'operations' or request.user.role != 'manager':
+        return JsonResponse({'error': 'forbidden'}, status=403)
+    task = get_object_or_404(DailyTask, pk=pk, status='done')
+    if request.method == 'POST':
+        if task.is_reviewed:
+            task.is_reviewed = False
+            task.reviewed_by = None
+            task.reviewed_at = None
+        else:
+            task.is_reviewed = True
+            task.reviewed_by = request.user
+            task.reviewed_at = timezone.now()
+        task.save(update_fields=['is_reviewed', 'reviewed_by', 'reviewed_at'])
+        return JsonResponse({
+            'ok': True,
+            'is_reviewed': task.is_reviewed,
+            'reviewed_by': task.reviewed_by.get_full_name() if task.reviewed_by else '',
+            'reviewed_at': task.reviewed_at.strftime('%m/%d %H:%M') if task.reviewed_at else '',
+        })
+    return JsonResponse({'error': 'method'}, status=405)
+
+
 # ── SubTask 뷰 ─────────────────────────────────────────────────
 
 @login_required
@@ -631,7 +656,7 @@ class TaskManagerReportView(ManagerRequiredMixin, TemplateView):
 
         done_tasks = (
             DailyTask.objects
-            .filter(start_date=target_date, status='done')
+            .filter(completed_date=target_date, status='done')
             .select_related('user')
             .order_by('user__last_name', 'user__username')
         )
@@ -664,7 +689,7 @@ def task_daily_pdf(request):
 
     tasks = (
         DailyTask.objects
-        .filter(Q(start_date=target_date) | Q(start_date__lt=target_date, status__in=('doing', 'hold')))
+        .filter(Q(completed_date=target_date) | Q(start_date__lte=target_date, status__in=('doing', 'hold')))
         .select_related('user')
         .order_by('user__last_name', 'user__username')
     )
@@ -702,7 +727,7 @@ class TaskWeeklyReportView(ManagerRequiredMixin, TemplateView):
             day = week_start + datetime.timedelta(days=d)
             done = (
                 DailyTask.objects
-                .filter(start_date=day, status='done')
+                .filter(completed_date=day, status='done')
                 .select_related('user')
                 .order_by('user__last_name', 'user__username')
             )
@@ -751,7 +776,7 @@ def task_weekly_pdf(request):
         day = week_start + datetime.timedelta(days=d)
         days[day] = (
             DailyTask.objects
-            .filter(Q(start_date=day) | Q(start_date__lt=day, status__in=('doing', 'hold')))
+            .filter(Q(completed_date=day) | Q(start_date__lte=day, status__in=('doing', 'hold')))
             .select_related('user')
             .order_by('user__last_name', 'user__username')
         )
