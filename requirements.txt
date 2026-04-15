@@ -10,6 +10,7 @@ Django==6.0.3
 djangorestframework==3.17.1
 fonttools==4.62.1
 greenlet==3.3.2
+gunicorn==25.3.0
 hwpx==1.1.1
 idna==3.11
 lxml==6.0.2
