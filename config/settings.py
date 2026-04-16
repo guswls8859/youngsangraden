@@ -15,10 +15,12 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + [
     'port-0-youngsangraden-mnr0z8y3c0b4fb14.sel3.cloudtype.app',
+    'port-0-test-mnr0z8y3c0b4fb14.sel3.cloudtype.app',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://port-0-youngsangraden-mnr0z8y3c0b4fb14.sel3.cloudtype.app',
+    'https://port-0-test-mnr0z8y3c0b4fb14.sel3.cloudtype.app',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
 ]
