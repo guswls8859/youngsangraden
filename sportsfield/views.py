@@ -362,6 +362,26 @@ def _parse_actual_count(val):
         return None
 
 
+class ReservationUpdateView(SportsfieldAccessMixin, View):
+    def post(self, request, rv_no):
+        r = get_object_or_404(Reservation, rv_no=rv_no)
+        r.applicant_name = request.POST.get('applicant_name', r.applicant_name).strip() or r.applicant_name
+        r.phone          = request.POST.get('phone', '').strip()
+        r.birth_date     = request.POST.get('birth_date', '').strip()
+        r.email          = request.POST.get('email', '').strip()
+        r.organization   = request.POST.get('organization', '').strip()
+        r.total_users    = _parse_actual_count(request.POST.get('total_users'))
+        r.adult_count    = _parse_actual_count(request.POST.get('adult_count'))
+        r.child_count    = _parse_actual_count(request.POST.get('child_count'))
+        r.scoreboard     = request.POST.get('scoreboard', '').strip()
+        r.rv_status      = request.POST.get('rv_status', '').strip()
+        r.save(update_fields=[
+            'applicant_name', 'phone', 'birth_date', 'email', 'organization',
+            'total_users', 'adult_count', 'child_count', 'scoreboard', 'rv_status',
+        ])
+        return JsonResponse({'ok': True})
+
+
 class ReservationUsageUpdateView(SportsfieldAccessMixin, View):
     def post(self, request, rv_no):
         r = get_object_or_404(Reservation, rv_no=rv_no)

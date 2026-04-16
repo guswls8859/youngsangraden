@@ -205,6 +205,9 @@
             </div>
             <div class="modal-footer">
                 <button id="detailDelBtn" class="btn btn-outline-danger btn-sm d-none">삭제</button>
+                <button id="detailEditBtn" class="btn btn-outline-primary btn-sm d-none">수정</button>
+                <button id="detailEditSaveBtn" class="btn btn-primary btn-sm d-none">저장</button>
+                <button id="detailEditCancelBtn" class="btn btn-outline-secondary btn-sm d-none">수정 취소</button>
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
@@ -310,35 +313,30 @@ document.getElementById('m_saveBtn').addEventListener('click', () => {
 });
 
 // ── 항목 클릭 → 상세 모달 ───────────────────────────
+let _currentRvNo = null;
+let _currentDetailData = null;
+
 function renderDetail(data) {
-    const titleEl = document.getElementById('detailTitle');
-    const bodyEl  = document.getElementById('detailBody');
-    const delBtn  = document.getElementById('detailDelBtn');
+    const titleEl      = document.getElementById('detailTitle');
+    const bodyEl       = document.getElementById('detailBody');
+    const delBtn       = document.getElementById('detailDelBtn');
+    const editBtn      = document.getElementById('detailEditBtn');
+    const editSaveBtn  = document.getElementById('detailEditSaveBtn');
+    const editCancelBtn= document.getElementById('detailEditCancelBtn');
+
+    // 수정 관련 버튼 초기 숨김
+    editBtn.classList.add('d-none');
+    editSaveBtn.classList.add('d-none');
+    editCancelBtn.classList.add('d-none');
 
     if (data.type === 'normal') {
+        _currentDetailData = data;
         titleEl.textContent = `예약 상세 - ${data.name}`;
-        const rows = [
-            ['구장',        data.field],
-            ['날짜',        data.date],
-            ['시간',        data.time],
-            ['예약자',      data.name],
-            ['연락처',      data.phone || '-'],
-            ['생년월일',    data.birth_date || '-'],
-            ['이메일',      data.email || '-'],
-            ['소속',        data.organization || '-'],
-            ['예약인원',    data.total_users != null ? `${data.total_users}명` : '-'],
-            ['성인(13세~)', data.adult_count != null ? `${data.adult_count}명` : '-'],
-            ['어린이(~12)', data.child_count != null ? `${data.child_count}명` : '-'],
-            ['전광판',      data.scoreboard || '-'],
-            ['예약상태',    data.rv_status || '-'],
-            ['예약번호',    data.reservation_number || '-'],
-            ['신청일시',    data.applied_at || '-'],
-        ];
-        bodyEl.innerHTML = rows.map(([l, v]) =>
-            `<div class="detail-row"><span class="detail-label">${l}</span><span class="detail-value">${v}</span></div>`
-        ).join('');
+        renderDetailView(data);
         delBtn.classList.add('d-none');
+        editBtn.classList.remove('d-none');
     } else {
+        _currentDetailData = null;
         titleEl.textContent = `${data.category} - ${data.title}`;
         const resAdult = data.reserved_adult_count != null ? `${data.reserved_adult_count}명` : '-';
         const resChild = data.reserved_child_count != null ? `${data.reserved_child_count}명` : '-';
@@ -365,6 +363,139 @@ function renderDetail(data) {
     }
 }
 
+function renderDetailView(data) {
+    const bodyEl = document.getElementById('detailBody');
+    const rows = [
+        ['구장',        data.field],
+        ['날짜',        data.date],
+        ['시간',        data.time],
+        ['예약자',      data.name],
+        ['연락처',      data.phone || '-'],
+        ['생년월일',    data.birth_date || '-'],
+        ['이메일',      data.email || '-'],
+        ['소속',        data.organization || '-'],
+        ['예약인원',    data.total_users != null ? `${data.total_users}명` : '-'],
+        ['성인(13세~)', data.adult_count != null ? `${data.adult_count}명` : '-'],
+        ['어린이(~12)', data.child_count != null ? `${data.child_count}명` : '-'],
+        ['전광판',      data.scoreboard || '-'],
+        ['예약상태',    data.rv_status || '-'],
+        ['예약번호',    data.reservation_number || '-'],
+        ['신청일시',    data.applied_at || '-'],
+    ];
+    bodyEl.innerHTML = rows.map(([l, v]) =>
+        `<div class="detail-row"><span class="detail-label">${l}</span><span class="detail-value">${v}</span></div>`
+    ).join('');
+}
+
+function renderEditForm(data) {
+    const bodyEl = document.getElementById('detailBody');
+    const v = (val) => val != null ? val : '';
+    bodyEl.innerHTML = `
+        <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">구장 / 날짜 / 시간</label>
+            <p class="form-control-plaintext py-0 small text-muted">${data.field} · ${data.date} · ${data.time}</p>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">예약자 <span class="text-danger">*</span></label>
+            <input type="text" id="e_name" class="form-control form-control-sm" value="${v(data.name)}">
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col-6">
+                <label class="form-label small fw-semibold mb-1">연락처</label>
+                <input type="text" id="e_phone" class="form-control form-control-sm" value="${v(data.phone)}">
+            </div>
+            <div class="col-6">
+                <label class="form-label small fw-semibold mb-1">생년월일</label>
+                <input type="text" id="e_birth" class="form-control form-control-sm" value="${v(data.birth_date)}">
+            </div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">이메일</label>
+            <input type="text" id="e_email" class="form-control form-control-sm" value="${v(data.email)}">
+        </div>
+        <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">소속</label>
+            <input type="text" id="e_org" class="form-control form-control-sm" value="${v(data.organization)}">
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col-4">
+                <label class="form-label small fw-semibold mb-1">예약인원</label>
+                <input type="number" id="e_total" class="form-control form-control-sm" min="0" value="${v(data.total_users)}">
+            </div>
+            <div class="col-4">
+                <label class="form-label small fw-semibold mb-1">성인(13세~)</label>
+                <input type="number" id="e_adult" class="form-control form-control-sm" min="0" value="${v(data.adult_count)}">
+            </div>
+            <div class="col-4">
+                <label class="form-label small fw-semibold mb-1">어린이(~12)</label>
+                <input type="number" id="e_child" class="form-control form-control-sm" min="0" value="${v(data.child_count)}">
+            </div>
+        </div>
+        <div class="row g-2 mb-1">
+            <div class="col-6">
+                <label class="form-label small fw-semibold mb-1">전광판</label>
+                <input type="text" id="e_scoreboard" class="form-control form-control-sm" value="${v(data.scoreboard)}">
+            </div>
+            <div class="col-6">
+                <label class="form-label small fw-semibold mb-1">예약상태</label>
+                <input type="text" id="e_rv_status" class="form-control form-control-sm" value="${v(data.rv_status)}">
+            </div>
+        </div>
+    `;
+}
+
+// ── 수정 버튼 클릭 ────────────────────────────────────
+document.getElementById('detailEditBtn').addEventListener('click', () => {
+    if (!_currentDetailData) return;
+    renderEditForm(_currentDetailData);
+    document.getElementById('detailEditBtn').classList.add('d-none');
+    document.getElementById('detailEditSaveBtn').classList.remove('d-none');
+    document.getElementById('detailEditCancelBtn').classList.remove('d-none');
+});
+
+// ── 수정 취소 ─────────────────────────────────────────
+document.getElementById('detailEditCancelBtn').addEventListener('click', () => {
+    if (!_currentDetailData) return;
+    renderDetailView(_currentDetailData);
+    document.getElementById('detailEditBtn').classList.remove('d-none');
+    document.getElementById('detailEditSaveBtn').classList.add('d-none');
+    document.getElementById('detailEditCancelBtn').classList.add('d-none');
+});
+
+// ── 수정 저장 ─────────────────────────────────────────
+document.getElementById('detailEditSaveBtn').addEventListener('click', () => {
+    if (!_currentRvNo) return;
+    const name = document.getElementById('e_name').value.trim();
+    if (!name) { alert('예약자 이름을 입력해주세요.'); return; }
+
+    const body = new URLSearchParams({
+        applicant_name: name,
+        phone:          document.getElementById('e_phone').value.trim(),
+        birth_date:     document.getElementById('e_birth').value.trim(),
+        email:          document.getElementById('e_email').value.trim(),
+        organization:   document.getElementById('e_org').value.trim(),
+        total_users:    document.getElementById('e_total').value,
+        adult_count:    document.getElementById('e_adult').value,
+        child_count:    document.getElementById('e_child').value,
+        scoreboard:     document.getElementById('e_scoreboard').value.trim(),
+        rv_status:      document.getElementById('e_rv_status').value.trim(),
+    });
+
+    fetch(`/sportsfield/reservation/${_currentRvNo}/edit/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert('저장 실패');
+        }
+    });
+});
+
 document.addEventListener('click', (ev) => {
     if (ev.target.closest('.sf-del-btn') || ev.target.closest('.add-trigger')) return;
     const item = ev.target.closest('.view-trigger');
@@ -381,6 +512,8 @@ document.addEventListener('click', (ev) => {
     document.getElementById('detailDelBtn').classList.add('d-none');
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).show();
+
+    _currentRvNo = rvNo || null;
 
     fetch(url, { headers: { 'X-CSRFToken': CSRF } })
     .then(r => r.json())
