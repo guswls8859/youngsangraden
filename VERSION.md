@@ -4,6 +4,15 @@
 
 ---
 
+## [0.2.3] - 2026-04-16
+
+### 변경
+- **Cloudtype Dockerfile 배포 안정화** — staticfiles 디렉토리 권한 설정(`chmod 777`), `HOME=/tmp` 설정으로 gunicorn 소켓 경로 오류 해결, `--pid /tmp/gunicorn.pid` 추가
+- **GODATA 스크래퍼 클릭 안정화** — 대시보드·구역비교·조회 버튼에 `force=True` 강제 클릭 및 텍스트 기반 셀렉터 fallback 추가 (ExtJS 동적 ID 대응)
+- **신규 배포 도메인 등록** — `port-0-test-mnr0z8y3c0b4fb14.sel3.cloudtype.app` ALLOWED_HOSTS·CSRF_TRUSTED_ORIGINS 추가
+
+---
+
 ## [0.1.1] - 2026-04-15
 
 ### 변경
