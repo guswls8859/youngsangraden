@@ -28,7 +28,6 @@ python-dotenv==1.2.2
 reportlab==4.4.10
 requests==2.33.1
 soupsieve==2.8.3
-South==1.0.2
 sqlparse==0.5.5
 tinycss2==1.5.1
 tinyhtml5==2.1.0
