@@ -53,6 +53,7 @@ class Reservation(models.Model):
 
 class SportsfieldEntry(models.Model):
     CATEGORY_CHOICES = [
+        ('normal', '일반'),
         ('quarter', '쿼터'),
         ('event', '행사'),
         ('other', '기타'),

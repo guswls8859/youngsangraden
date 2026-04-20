@@ -317,7 +317,7 @@ class EntryCreateView(SportsfieldAccessMixin, View):
         category = request.POST.get('category')
 
         valid_fields = [f[0] for f in FIELD_CHOICES]
-        valid_cats = ['quarter', 'event', 'other']
+        valid_cats = ['normal', 'quarter', 'event', 'other']
 
         if not all([field_type, entry_date, title, category, time_slot]):
             return JsonResponse({'ok': False, 'message': '필수 항목을 모두 입력해주세요.'}, status=400)

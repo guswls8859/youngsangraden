@@ -160,6 +160,10 @@
                     <label class="form-label fw-semibold">구분 <span class="text-danger">*</span></label>
                     <div class="d-flex gap-3">
                         <div class="form-check">
+                            <input class="form-check-input" type="radio" name="m_cat" id="cat_normal" value="normal" checked>
+                            <label class="form-check-label" for="cat_normal">일반</label>
+                        </div>
+                        <div class="form-check">
                             <input class="form-check-input" type="radio" name="m_cat" id="cat_quarter" value="quarter">
                             <label class="form-check-label" for="cat_quarter">쿼터</label>
                         </div>
@@ -168,7 +172,7 @@
                             <label class="form-check-label" for="cat_event">행사</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="m_cat" id="cat_other" value="other" checked>
+                            <input class="form-check-input" type="radio" name="m_cat" id="cat_other" value="other">
                             <label class="form-check-label" for="cat_other">기타</label>
                         </div>
                     </div>
@@ -284,7 +288,7 @@ document.addEventListener('click', (ev) => {
     document.getElementById('m_title').value = '';
     document.getElementById('m_adult').value = '';
     document.getElementById('m_child').value = '';
-    document.querySelector('input[name="m_cat"][value="other"]').checked = true;
+    document.querySelector('input[name="m_cat"][value="normal"]').checked = true;
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addModal')).show();
 });

@@ -895,7 +895,7 @@ def godata_manual_fetch(request):
 
 def _sf_slot(sf_reservations, sf_entries, field_types, start_time):
     """구장/시작시간으로 entry 또는 reservation 데이터를 반환한다."""
-    CAT = {'quarter': '쿼터', 'event': '행사', 'other': '기타'}
+    CAT = {'normal': '일반', 'quarter': '쿼터', 'event': '행사', 'other': '기타'}
     if isinstance(field_types, str):
         field_types = [field_types]
     for e in sf_entries:

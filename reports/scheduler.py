@@ -3,7 +3,7 @@
 자동 수집 시각:
   - 평일 (월~금): 17:30 KST
   - 토요일:       20:30 KST
-  - 일요일:       없음
+  - 일요일:       17:30 KST
 """
 import logging
 
@@ -37,8 +37,18 @@ def start():
         misfire_grace_time=600,
     )
 
+    # 일요일 17:30
+    scheduler.add_job(
+        _run_sync,
+        trigger=CronTrigger(day_of_week='sun', hour=17, minute=30, timezone='Asia/Seoul'),
+        id='godata_sunday',
+        name='GODATA 일요일 자동수집 (17:30)',
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
     scheduler.start()
-    logger.info('GODATA 자동수집 스케줄러 시작 — 평일 17:30 / 토요일 20:30')
+    logger.info('GODATA 자동수집 스케줄러 시작 — 평일 17:30 / 토요일 20:30 / 일요일 17:30')
     return scheduler
 
 

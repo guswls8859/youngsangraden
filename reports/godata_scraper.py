@@ -94,11 +94,12 @@ def fetch_today_entry_count() -> dict | None:
             logger.warning('GODATA: 입장 합계 파싱 실패.\n--- body ---\n%s\n---', body)
             return None
 
-        # ── 주/부출입구 — found 리스트 인덱스로 추출 ─────────
-        # 확인된 순서: [0]=부출입구, [1]=부출입구퇴장, [2]=주출입구, [3]=주출입구퇴장
-        if len(found) >= 3:
-            sub_gate  = _parse_count(found[0])  # 부출입구
-            main_gate = _parse_count(found[2])  # 주출입구
+        # ── 주/부출입구 — found 리스트 끝 4개에서 추출 ───────
+        # 평일: found = [부출입구, 부퇴장, 주출입구, 주퇴장] (4개)
+        # 토·일: GODATA가 주간 누적합을 앞에 추가 → 일별 합계는 항상 마지막 4개
+        if len(found) >= 4:
+            sub_gate  = _parse_count(found[-4])  # 부출입구
+            main_gate = _parse_count(found[-2])  # 주출입구
         else:
             logger.warning('GODATA: "명" 패턴 부족 (%d개) — 주/부출입구 0으로 처리', len(found))
             sub_gate  = 0
