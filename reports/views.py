@@ -1,4 +1,5 @@
 import datetime
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
@@ -891,6 +892,123 @@ def godata_manual_fetch(request):
         messages.error(request, 'GODATA 수집 실패 — 서버 로그를 확인하세요.')
 
     return redirect(f'/reports/integrated/{date_param}')
+
+
+@login_required
+def integrated_daily_excel(request):
+    """방문객 통계 엑셀 다운로드 — 기준 파일에 DB 신규 데이터 추가"""
+    if _require_operations(request):
+        return redirect('main_menu')
+
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, Alignment
+    from pathlib import Path
+
+    BASE_FILE = Path(settings.BASE_DIR) / 'reports' / 'excel_base' / '방문객통계_기준.xlsx'
+    wb = openpyxl.load_workbook(BASE_FILE)
+    ws = wb.active
+
+    # ── 기준 파일에 이미 있는 날짜 수집 ──────────────────────
+    existing_dates = set()
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        val = row[0]
+        if val is None:
+            continue
+        if hasattr(val, 'date'):       # datetime → date
+            existing_dates.add(val.date())
+        elif isinstance(val, datetime.date):
+            existing_dates.add(val)
+
+    # ── 기준 파일에 없는 날짜만 DB에서 조회 ──────────────────
+    qs = OperationsDailyData.objects.exclude(
+        report_date__in=existing_dates
+    ).order_by('report_date')
+
+    if not qs.exists():
+        # 추가할 데이터 없음 — 기준 파일 그대로 반환
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        today = timezone.localdate()
+        response = HttpResponse(
+            buf.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        from urllib.parse import quote
+        filename = f'(중앙일보)용산어린이정원_방문객 통계_{today:%y%m%d}.xlsx'
+        response['Content-Disposition'] = (
+            f"attachment; filename=\"visitor_stats_{today:%y%m%d}.xlsx\"; "
+            f"filename*=UTF-8''{quote(filename, safe='')}"
+        )
+        return response
+
+    # ── 데이터 행 스타일 참조 (2번째 행 기준) ─────────────────
+    center = Alignment(horizontal='center', vertical='center')
+
+    def _copy_style(src_cell, dst_cell):
+        """폰트·정렬·테두리만 복사 (fill 제외 — 데이터행은 채우기 없음)"""
+        if src_cell.font:
+            dst_cell.font = src_cell.font.copy()
+        if src_cell.border:
+            dst_cell.border = src_cell.border.copy()
+        dst_cell.alignment = center
+
+    # 스타일 참조용 2행 셀 목록
+    ref_row = 2
+
+    def _slot(main, sub):
+        if main is None and sub is None:
+            return None
+        return (main or 0) + (sub or 0)
+
+    # ── 새 행 추가 ────────────────────────────────────────────
+    for ops in qs:
+        r = ws.max_row + 1
+
+        row_values = [
+            ops.report_date,
+            f'=SUM(C{r}:M{r})',
+            _slot(ops.slot_0900_main, ops.slot_0900_sub),
+            _slot(ops.slot_1000_main, ops.slot_1000_sub),
+            _slot(ops.slot_1100_main, ops.slot_1100_sub),
+            _slot(ops.slot_1200_main, ops.slot_1200_sub),
+            _slot(ops.slot_1300_main, ops.slot_1300_sub),
+            _slot(ops.slot_1400_main, ops.slot_1400_sub),
+            _slot(ops.slot_1500_main, ops.slot_1500_sub),
+            _slot(ops.slot_1600_main, ops.slot_1600_sub),
+            _slot(ops.slot_1700_main, ops.slot_1700_sub),
+            _slot(ops.slot_1800_main, ops.slot_1800_sub),
+            _slot(ops.slot_1900_main, ops.slot_1900_sub),
+            ops.car_visit or '-',
+            ops.main_gate_walk,
+            ops.sub_gate_walk,
+        ]
+
+        for col_idx, val in enumerate(row_values, start=1):
+            dst = ws.cell(row=r, column=col_idx, value=val)
+            src = ws.cell(row=ref_row, column=col_idx)
+            _copy_style(src, dst)
+            if col_idx == 1:
+                dst.number_format = 'mm-dd-yy'
+
+    # ── 반환 ─────────────────────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    today = timezone.localdate()
+    from urllib.parse import quote
+    filename = f'(중앙일보)용산어린이정원_방문객 통계_{today:%y%m%d}.xlsx'
+    response = HttpResponse(
+        buf.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = (
+        f"attachment; filename=\"visitor_stats_{today:%y%m%d}.xlsx\"; "
+        f"filename*=UTF-8''{quote(filename, safe='')}"
+    )
+    return response
 
 
 def _sf_slot(sf_reservations, sf_entries, field_types, start_time):

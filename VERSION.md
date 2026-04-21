@@ -4,6 +4,27 @@
 
 ---
 
+## [0.3.0] - 2026-04-21
+
+### 추가
+- **방문객 통계 엑셀 다운로드** — 기준 파일(`reports/excel_base/방문객통계_기준.xlsx`)을 베이스로 DB의 신규 날짜 데이터만 아래에 추가하는 append 방식 구현
+  - 파일명 형식: `(중앙일보)용산어린이정원_방문객 통계_YYMMDD.xlsx`
+  - B열 합계는 `=SUM(C:M)` 수식, 날짜 포맷·테두리·폰트 2행 스타일 복사
+  - `requirements.txt`에 `openpyxl==3.1.5` 추가
+- **GODATA 시간대별 입장 데이터 수집 및 저장** — `_parse_time_slots()` 추가, 구역비교 조회 후 09:00~20:00 시간대별 주출입구·부출입구 입장 인원 파싱
+  - `OperationsDailyData`에 `slot_HHMM_main` / `slot_HHMM_sub` 24개 필드 추가 (nullable)
+  - `reports/migrations/0009_add_timeslot_fields.py` 마이그레이션
+  - `[SLOT-TEST]` INFO 로그로 파싱 과정 전체 출력 (테스트 모드)
+- **스포츠필드 예약 카테고리 '일반' 추가** — `SportsfieldEntry.CATEGORY_CHOICES`에 `('normal', '일반')` 추가, 엔트리 생성 폼 기본값 변경
+  - `sportsfield/migrations/0008_add_normal_category.py` 마이그레이션
+
+### 변경
+- **GODATA 토요일 수집 버그 수정** — 토요일에 주간 누적합이 앞에 추가되어 인덱스가 밀리는 문제 해결 (`found[0]`/`found[2]` → `found[-4]`/`found[-2]`)
+- **GODATA 일요일 자동수집 추가** — `scheduler.py`에 일요일 17:30 CronTrigger 등록 (기존: 평일 17:30 / 토요일 20:30)
+- 통합일일보고 자동수집 안내 문구 갱신 — "평일·일요일 17:30, 토요일 20:30"
+
+---
+
 ## [0.2.3] - 2026-04-16
 
 ### 변경

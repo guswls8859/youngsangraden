@@ -97,6 +97,7 @@ def fetch_today_entry_count() -> dict | None:
         # ── 주/부출입구 — found 리스트 끝 4개에서 추출 ───────
         # 평일: found = [부출입구, 부퇴장, 주출입구, 주퇴장] (4개)
         # 토·일: GODATA가 주간 누적합을 앞에 추가 → 일별 합계는 항상 마지막 4개
+        logger.info('[SLOT-TEST] "명" 패턴 전체(%d개): %s', len(found), found)
         if len(found) >= 4:
             sub_gate  = _parse_count(found[-4])  # 부출입구
             main_gate = _parse_count(found[-2])  # 주출입구
@@ -105,11 +106,15 @@ def fetch_today_entry_count() -> dict | None:
             sub_gate  = 0
             main_gate = 0
 
+        # ── 시간대별 파싱 (테스트) ───────────────────────────
+        time_slots = _parse_time_slots(body)
+
         return {
             'today_total':    _parse_count(m_enter.group(1)),
             'today_exit':     _parse_count(m_exit.group(1)) if m_exit else 0,
             'main_gate_walk': main_gate,
             'sub_gate_walk':  sub_gate,
+            'time_slots':     time_slots,
         }
 
     except Exception as exc:
@@ -145,11 +150,15 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
         ops_existing := OperationsDailyData.objects.filter(report_date=target_date).first()
     ) else 0
 
+    time_slots = data.get('time_slots', {})
+    logger.info('[SLOT-TEST] 저장할 시간대별 데이터: %s', time_slots)
+
     godata_fields = {
         'godata_total':   godata_pedestrian,
         'today_total':    godata_pedestrian + car_visit,
         'main_gate_walk': data.get('main_gate_walk', 0),
         'sub_gate_walk':  data.get('sub_gate_walk', 0),
+        **time_slots,
     }
 
     ops, created = OperationsDailyData.objects.get_or_create(
@@ -176,6 +185,73 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
 
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
+
+def _parse_time_slots(body: str) -> dict:
+    """
+    body에서 시간대별 주출입구·부출입구 입장 인원을 파싱한다.
+
+    GODATA body 구조 (줄 단위):
+        09:00 ~ 10:00
+        {부출입구 입장}   ← nums[0]
+        {부출입구 퇴장}   ← nums[1]  (저장 안 함)
+        {주출입구 입장}   ← nums[2]
+        {주출입구 퇴장}   ← nums[3]  (저장 안 함)
+        10:00 ~ 11:00
+        ...
+        {부출입구 입장 합계} 명
+        ...
+
+    반환: {'slot_0900_sub': int, 'slot_0900_main': int, ...}  실패 시 빈 dict
+
+    [테스트 모드] 파싱 과정 전체를 INFO 로그로 출력.
+    """
+    logger.info('[SLOT-TEST] ─── 시간대별 파싱 시작 ───')
+    logger.info('[SLOT-TEST] body 길이: %d자', len(body))
+
+    lines = [l.strip() for l in body.split('\n') if l.strip()]
+    logger.info('[SLOT-TEST] 공백 제거 후 총 %d줄', len(lines))
+
+    # ── 시간대 줄 탐색 ("09:00 ~ 10:00" 형식, 공백 허용) ──
+    TIME_RE = re.compile(r'^(\d{2}):\d{2}\s*~\s*\d{2}:\d{2}$')
+    NUM_RE  = re.compile(r'^[\d,]+$')
+
+    slot_indices = [(i, TIME_RE.match(line).group(1))
+                    for i, line in enumerate(lines) if TIME_RE.match(line)]
+    logger.info('[SLOT-TEST] 시간대 줄 %d개: %s', len(slot_indices),
+                [(h, lines[i]) for i, h in slot_indices])
+
+    if not slot_indices:
+        logger.warning('[SLOT-TEST] 시간대 패턴 없음 — body 앞 80줄:\n%s', '\n'.join(lines[:80]))
+        return {}
+
+    # ── "명" 합계줄 시작 위치 (슬롯 블록 종료 기준) ─────────
+    명_start = next((i for i, l in enumerate(lines) if '명' in l), len(lines))
+
+    results = {}
+    NUM_ONLY_RE = re.compile(r'^[\d,]+$')
+
+    for idx, (line_idx, start_h) in enumerate(slot_indices):
+        next_slot = slot_indices[idx + 1][0] if idx + 1 < len(slot_indices) else 명_start
+        block = lines[line_idx + 1: next_slot]  # 시간대 줄 제외, 다음 시간대 전까지
+
+        nums = [int(l.replace(',', '')) for l in block if NUM_ONLY_RE.match(l)]
+        logger.info('[SLOT-TEST] %s:00 블록=%s → 숫자=%s', start_h, block, nums)
+
+        if len(nums) < 3:
+            logger.warning('[SLOT-TEST] %s:00 숫자 부족(%d개) — 스킵', start_h, len(nums))
+            continue
+
+        # nums[0]=부출입구입장, nums[1]=부출입구퇴장, nums[2]=주출입구입장, nums[3]=주출입구퇴장
+        sub_entry  = nums[0]
+        main_entry = nums[2]
+        key        = f'slot_{start_h}00'
+        results[f'{key}_sub']  = sub_entry
+        results[f'{key}_main'] = main_entry
+        logger.info('[SLOT-TEST] %s:00 → 주출입구=%d 부출입구=%d', start_h, main_entry, sub_entry)
+
+    logger.info('[SLOT-TEST] ─── 최종 파싱 결과 (%d슬롯): %s ───', len(results) // 2, results)
+    return results
+
 
 def _wait_mask(page, timeout=15000):
     """x-mask 로딩 레이어가 사라질 때까지 대기."""
