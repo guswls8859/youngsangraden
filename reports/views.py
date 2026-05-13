@@ -909,16 +909,23 @@ def integrated_daily_excel(request):
     wb = openpyxl.load_workbook(BASE_FILE)
     ws = wb.active
 
-    # ── 기준 파일에 이미 있는 날짜 수집 ──────────────────────
+    # ── 기준 파일 스캔: 날짜 + 마지막 데이터 행 + 합계 행(SUM 수식) ─
     existing_dates = set()
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        val = row[0]
-        if val is None:
+    last_data_row = 1   # 헤더(1행) 기준 시작
+    sum_row = None      # 합계 행 (A열 비어있고 B열이 =SUM(...))
+    for r, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        a_val = row[0]
+        b_val = row[1] if len(row) > 1 else None
+        if a_val is None:
+            if isinstance(b_val, str) and b_val.upper().startswith('=SUM('):
+                sum_row = r
+                break  # 합계 행 이후는 무시
             continue
-        if hasattr(val, 'date'):       # datetime → date
-            existing_dates.add(val.date())
-        elif isinstance(val, datetime.date):
-            existing_dates.add(val)
+        last_data_row = r
+        if hasattr(a_val, 'date'):     # datetime → date
+            existing_dates.add(a_val.date())
+        elif isinstance(a_val, datetime.date):
+            existing_dates.add(a_val)
 
     # ── 기준 파일에 없는 날짜만 DB에서 조회 ──────────────────
     qs = OperationsDailyData.objects.exclude(
@@ -962,9 +969,22 @@ def integrated_daily_excel(request):
             return None
         return (main or 0) + (sub or 0)
 
-    # ── 새 행 추가 ────────────────────────────────────────────
-    for ops in qs:
-        r = ws.max_row + 1
+    # ── 새 행 삽입 위치 결정 ──────────────────────────────────
+    new_rows = list(qs)
+    n = len(new_rows)
+
+    if sum_row is not None:
+        # 합계 행 위에 n개의 빈 행 삽입 → 합계 행은 sum_row+n으로 밀림
+        ws.insert_rows(sum_row, amount=n)
+        insert_start = sum_row
+        new_sum_row  = sum_row + n
+    else:
+        insert_start = last_data_row + 1
+        new_sum_row  = None
+
+    # ── 새 행 채우기 ──────────────────────────────────────────
+    for i, ops in enumerate(new_rows):
+        r = insert_start + i
 
         row_values = [
             ops.report_date,
@@ -991,6 +1011,15 @@ def integrated_daily_excel(request):
             _copy_style(src, dst)
             if col_idx == 1:
                 dst.number_format = 'mm-dd-yy'
+
+    # ── 합계 행 SUM 수식 범위 갱신 (B~P열) ────────────────────
+    if new_sum_row is not None:
+        last_data_after = new_sum_row - 1
+        for c in range(2, 17):  # B(2) ~ P(16)
+            col_letter = openpyxl.utils.get_column_letter(c)
+            ws.cell(row=new_sum_row, column=c).value = (
+                f'=SUM({col_letter}2:{col_letter}{last_data_after})'
+            )
 
     # ── 반환 ─────────────────────────────────────────────────
     buf = io.BytesIO()

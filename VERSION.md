@@ -4,7 +4,7 @@
 
 ---
 
-## [0.3.0] - 2026-04-21
+## [0.4.1] - 2026-04-21
 
 ### 추가
 - **방문객 통계 엑셀 다운로드** — 기준 파일(`reports/excel_base/방문객통계_기준.xlsx`)을 베이스로 DB의 신규 날짜 데이터만 아래에 추가하는 append 방식 구현
@@ -15,6 +15,12 @@
   - `OperationsDailyData`에 `slot_HHMM_main` / `slot_HHMM_sub` 24개 필드 추가 (nullable)
   - `reports/migrations/0009_add_timeslot_fields.py` 마이그레이션
   - `[SLOT-TEST]` INFO 로그로 파싱 과정 전체 출력 (테스트 모드)
+
+---
+
+## [0.3.0] - 2026-04-20
+
+### 추가
 - **스포츠필드 예약 카테고리 '일반' 추가** — `SportsfieldEntry.CATEGORY_CHOICES`에 `('normal', '일반')` 추가, 엔트리 생성 폼 기본값 변경
   - `sportsfield/migrations/0008_add_normal_category.py` 마이그레이션
 
