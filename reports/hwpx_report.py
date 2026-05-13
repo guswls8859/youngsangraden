@@ -53,12 +53,25 @@ def _fmt_sales(n):
         return '0'
 
 
+def _fmt_num(n):
+    """인원수 등 정수를 3자리마다 콤마로 변환. 0/None은 '0'."""
+    try:
+        return f"{int(n):,}"
+    except (TypeError, ValueError):
+        return '0'
+
+
 def _sf_val(slot, key):
-    """스포츠필드 슬롯 값을 문자열로 변환. 값 없으면 '-'."""
+    """스포츠필드 슬롯 값을 문자열로 변환. 값 없으면 '-', 숫자면 콤마 포맷."""
     if not slot:
         return '-'
     val = slot.get(key)
-    return str(val) if val is not None else '-'
+    if val is None:
+        return '-'
+    try:
+        return f"{int(val):,}"
+    except (TypeError, ValueError):
+        return str(val)
 
 
 def _set_t(cell, text):
@@ -203,7 +216,7 @@ def build_integrated_daily_hwpx(
     # 첫 단락: 입장 총수
     p0_t = visit_sl.findall('hp:p', NS)[0].find('hp:run/hp:t', NS)
     if p0_t is not None:
-        p0_t.text = f"입장 {today_total}명"
+        p0_t.text = f"입장 {_fmt_num(today_total)}명"
     # 중첩 테이블: 주출입구 / 부출입구 / 차량
     # 템플릿 구조: inner_row0=헤더(3셀), inner_row1=데이터(3셀)
     inner_vtbl = cell_visit.find('.//hp:tbl', NS)
@@ -212,14 +225,14 @@ def build_integrated_daily_hwpx(
         if len(v_rows) >= 2:
             dc = v_rows[1].findall('hp:tc', NS)
             if len(dc) >= 3:
-                _set_t(dc[0], str(_v(ops, 'main_gate_walk')))
-                _set_t(dc[1], str(_v(ops, 'sub_gate_walk')))
-                _set_t(dc[2], str(car_visit))
+                _set_t(dc[0], _fmt_num(_v(ops, 'main_gate_walk')))
+                _set_t(dc[1], _fmt_num(_v(ops, 'sub_gate_walk')))
+                _set_t(dc[2], _fmt_num(car_visit))
 
     # ── Row 4: 전일 방문현황 / 명일 기상상황 ─────────────────────────────────
     cells_r4 = rows[4].findall('hp:tc', NS)
     # cells_r4[1] = col 5 (전일 총수)
-    _set_para0_t(cells_r4[1], f"입장 {yesterday}명")
+    _set_para0_t(cells_r4[1], f"입장 {_fmt_num(yesterday)}명")
     # cells_r4[3] = col 9 (기상)
     if len(cells_r4) >= 4:
         wx_sl = cells_r4[3].find('hp:subList', NS)
@@ -293,10 +306,10 @@ def build_integrated_daily_hwpx(
         if len(park_rows) >= 2:
             dc = park_rows[1].findall('hp:tc', NS)
             if len(dc) >= 4:
-                _set_t(dc[0], str(p_family))
-                _set_t(dc[1], str(p_dis))
-                _set_t(dc[2], str(p_preg))
-                _set_t(dc[3], str(p_children))
+                _set_t(dc[0], _fmt_num(p_family))
+                _set_t(dc[1], _fmt_num(p_dis))
+                _set_t(dc[2], _fmt_num(p_preg))
+                _set_t(dc[3], _fmt_num(p_children))
 
     # ── Row 12: 편익시설 매출 (중첩 테이블) ───────────────────────────────────
     cells_r12 = rows[12].findall('hp:tc', NS)
