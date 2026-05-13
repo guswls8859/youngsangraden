@@ -845,8 +845,8 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         ops.main_gate_walk   = _int('main_gate_walk')
         ops.sub_gate_walk    = _int('sub_gate_walk')
         ops.car_visit        = _int('car_visit')
-        # 입장 총수 = GODATA 도보 합계 + 차량방문
-        ops.today_total      = ops.godata_total + ops.car_visit
+        # 입장 총수 = 주출입구 + 부출입구 + 차량방문 (수기 수정값 반영)
+        ops.today_total      = ops.main_gate_walk + ops.sub_gate_walk + ops.car_visit
         # 전일 입장 총수: 전날 today_total 자동 참조
         prev_ops = OperationsDailyData.objects.filter(
             report_date=target_date - datetime.timedelta(days=1)).first()
@@ -928,9 +928,15 @@ def integrated_daily_excel(request):
             existing_dates.add(a_val)
 
     # ── 기준 파일에 없는 날짜만 DB에서 조회 ──────────────────
+    # 시간대별 데이터가 하나도 없는 행(slot 필드 전부 None)은 제외
+    from django.db.models import Q
+    slot_filter = Q()
+    for h in range(9, 21):
+        slot_filter |= Q(**{f'slot_{h:02d}00_main__isnull': False})
+        slot_filter |= Q(**{f'slot_{h:02d}00_sub__isnull':  False})
     qs = OperationsDailyData.objects.exclude(
         report_date__in=existing_dates
-    ).order_by('report_date')
+    ).filter(slot_filter).order_by('report_date')
 
     if not qs.exists():
         # 추가할 데이터 없음 — 기준 파일 그대로 반환

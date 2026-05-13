@@ -99,7 +99,7 @@
                     <div class="mb-2">
                         <label class="form-label small fw-medium">
                             입장 총수 (명)
-                            <span class="text-muted fw-normal" style="font-size:.75rem;">— GODATA 도보 + 차량방문 자동 합산</span>
+                            <span class="text-muted fw-normal" style="font-size:.75rem;">— 주출입구 + 부출입구 + 차량방문 자동 합산</span>
                         </label>
                         <input type="text" id="id_today_total_display"
                                class="form-control form-control-sm bg-light fw-bold"
@@ -108,12 +108,14 @@
                     <div class="row g-2">
                         <div class="col-4">
                             <label class="form-label small fw-medium">주출입구 도보</label>
-                            <input type="number" name="main_gate_walk" class="form-control form-control-sm"
+                            <input type="number" name="main_gate_walk" id="id_main_gate_walk"
+                                   class="form-control form-control-sm"
                                    min="0" value="{{ ops.main_gate_walk|default:0 }}">
                         </div>
                         <div class="col-4">
                             <label class="form-label small fw-medium">부출입구 도보</label>
-                            <input type="number" name="sub_gate_walk" class="form-control form-control-sm"
+                            <input type="number" name="sub_gate_walk" id="id_sub_gate_walk"
+                                   class="form-control form-control-sm"
                                    min="0" value="{{ ops.sub_gate_walk|default:0 }}">
                         </div>
                         <div class="col-4">
@@ -125,13 +127,19 @@
                     </div>
                     <script>
                     (function(){
-                        const godata = {{ ops.godata_total|default:0 }};
-                        const carInput = document.getElementById('id_car_visit');
-                        const display  = document.getElementById('id_today_total_display');
+                        const mainInput = document.getElementById('id_main_gate_walk');
+                        const subInput  = document.getElementById('id_sub_gate_walk');
+                        const carInput  = document.getElementById('id_car_visit');
+                        const display   = document.getElementById('id_today_total_display');
                         function update(){
-                            display.value = godata + (parseInt(carInput.value) || 0);
+                            const m = parseInt(mainInput.value) || 0;
+                            const s = parseInt(subInput.value)  || 0;
+                            const c = parseInt(carInput.value)  || 0;
+                            display.value = m + s + c;
                         }
-                        carInput.addEventListener('input', update);
+                        mainInput.addEventListener('input', update);
+                        subInput .addEventListener('input', update);
+                        carInput .addEventListener('input', update);
                     })();
                     </script>
                 </div>
