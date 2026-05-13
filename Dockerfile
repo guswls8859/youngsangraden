@@ -18,7 +18,7 @@ RUN playwright install chromium
 
 COPY . .
 
-RUN mkdir -p /app/staticfiles && chmod -R 777 /app/staticfiles
+RUN mkdir -p /app/staticfiles /app/media && chmod -R 777 /app/staticfiles /app/media
 
 EXPOSE 8000
 
