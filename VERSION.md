@@ -4,6 +4,16 @@
 
 ---
 
+## [0.6.1] - 2026-05-13
+
+### 변경
+- **Dockerfile — 미디어 디렉토리 생성** — Cloudtype 배포 시 `/app/media` 권한 오류로 작업사진 업로드 실패하던 문제 해결
+  - `mkdir -p /app/media && chmod -R 777 /app/media` 추가
+- **HWPX 작업사진 표 — 1장 사진 행 전체 폭 확장** — 행에 사진이 1장만 남을 때 빈 셀 대신 `colSpan=2`로 합쳐서 표 전체 폭 차지
+  - 마지막 셀의 `cellSz/width` 합산 + `cellSpan/colSpan` 갱신
+
+---
+
 ## [0.6.0] - 2026-05-13
 
 ### 추가

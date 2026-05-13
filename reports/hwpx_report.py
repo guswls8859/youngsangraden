@@ -730,18 +730,40 @@ def _fill_photo_paragraph(para, photos, caption, header_text,
         photo_assets[f'BinData/{new_id}.jpeg'] = data
         used += 1
 
-    # 빈 이미지 행 통째로 삭제
+    # 빈 이미지 행 통째로 삭제 + 마지막 행에 사진이 1장만 있으면 전체 폭으로 확장
     PER_ROW = 2
     needed_rows = (used + PER_ROW - 1) // PER_ROW
     for r in img_rows[needed_rows:]:
         photo_tbl.remove(r)
     remaining = img_rows[:needed_rows]
     cells_in_last = used - (needed_rows - 1) * PER_ROW if needed_rows else 0
-    if remaining and cells_in_last < PER_ROW:
+    if remaining and cells_in_last < PER_ROW and cells_in_last > 0:
         last_row = remaining[-1]
         last_cells = last_row.findall('hp:tc', NS)
+        # 사용 안 하는 셀들의 너비 합산
+        extra_width = 0
         for c in last_cells[cells_in_last:]:
+            cs = c.find('hp:cellSz', NS)
+            if cs is not None:
+                try:
+                    extra_width += int(cs.get('width') or 0)
+                except (TypeError, ValueError):
+                    pass
             last_row.remove(c)
+        # 남은 마지막 셀 너비/colSpan 확장
+        kept_cell = last_cells[cells_in_last - 1]
+        cs = kept_cell.find('hp:cellSz', NS)
+        if cs is not None and extra_width:
+            try:
+                cs.set('width', str(int(cs.get('width') or 0) + extra_width))
+            except (TypeError, ValueError):
+                pass
+        sp = kept_cell.find('hp:cellSpan', NS)
+        if sp is not None:
+            try:
+                sp.set('colSpan', str(int(sp.get('colSpan') or 1) + (PER_ROW - cells_in_last)))
+            except (TypeError, ValueError):
+                pass
     photo_tbl.set('rowCnt', str(1 + needed_rows + 1))
 
     # 캡션
