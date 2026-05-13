@@ -45,6 +45,10 @@
 <div class="alert alert-light border small mb-3">
     <i class="bi bi-info-circle text-primary"></i>
     <strong>자동 수집 항목</strong> — 스포츠필드 예약 현황, 편익시설 매출(카페어울림·잼잼카페·꿈나래마켓), 셔틀버스·대여물품·스탬프투어는 각 항목에 해당 날짜 데이터는 자동으로 반영합니다.
+    <div class="mt-2 text-danger fw-semibold">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        한글 다운로드 전에 반드시 <span class="text-decoration-underline">저장</span> 버튼을 먼저 눌러주세요. 저장하지 않은 입력 내용은 출력에 반영되지 않습니다.
+    </div>
 </div>
 
 <!-- GODATA 자동수집 안내 -->
@@ -95,7 +99,7 @@
     </style>
 
     <!-- Row 1: 금일 방문현황 | 내부시설 -->
-    <div class="row g-3 pair-row">
+    <div class="row g-4 pair-row mb-4">
         <div class="col-lg-6">
 
             <!-- 금일 방문현황 -->
@@ -163,6 +167,7 @@
                 <div class="card-body">
                     <textarea name="facility_interior" class="form-control form-control-sm mb-2" rows="2"
                               placeholder="점검 및 작업 내용">{{ ops.facility_interior|default:'' }}</textarea>
+                    {% if work_photos_interior %}
                     <div class="d-flex flex-wrap gap-2 mb-2 photo-gallery">
                         {% for wp in work_photos_interior %}
                         <div class="position-relative work-photo-item" style="width:80px;">
@@ -171,6 +176,7 @@
                         </div>
                         {% endfor %}
                     </div>
+                    {% endif %}
                     <div class="d-flex gap-2">
                         <input type="file" name="work_photos_interior" multiple accept="image/*"
                                class="form-control form-control-sm" style="max-width:55%;">
@@ -185,7 +191,7 @@
     </div>
 
     <!-- Row 2: 전일 방문현황 | 잔디마당 -->
-    <div class="row g-3 pair-row">
+    <div class="row g-4 pair-row mb-4">
         <div class="col-lg-6">
 
             <!-- 전일 방문현황 + 기상 -->
@@ -226,6 +232,7 @@
                 <div class="card-body">
                     <textarea name="facility_outdoor" class="form-control form-control-sm mb-2" rows="2"
                               placeholder="점검 및 작업 내용">{{ ops.facility_outdoor|default:'' }}</textarea>
+                    {% if work_photos_outdoor %}
                     <div class="d-flex flex-wrap gap-2 mb-2 photo-gallery">
                         {% for wp in work_photos_outdoor %}
                         <div class="position-relative work-photo-item" style="width:80px;">
@@ -234,6 +241,7 @@
                         </div>
                         {% endfor %}
                     </div>
+                    {% endif %}
                     <div class="d-flex gap-2">
                         <input type="file" name="work_photos_outdoor" multiple accept="image/*"
                                class="form-control form-control-sm" style="max-width:55%;">
@@ -248,7 +256,7 @@
     </div>
 
     <!-- Row 3: 주차장 | 분수정원 -->
-    <div class="row g-3 pair-row">
+    <div class="row g-4 pair-row mb-4">
         <div class="col-lg-6">
 
             <!-- 주차장 -->
@@ -292,6 +300,7 @@
                 <div class="card-body">
                     <textarea name="facility_fountain" class="form-control form-control-sm mb-2" rows="2"
                               placeholder="점검 및 작업 내용">{{ ops.facility_fountain|default:'' }}</textarea>
+                    {% if work_photos_fountain %}
                     <div class="d-flex flex-wrap gap-2 mb-2 photo-gallery">
                         {% for wp in work_photos_fountain %}
                         <div class="position-relative work-photo-item" style="width:80px;">
@@ -300,6 +309,7 @@
                         </div>
                         {% endfor %}
                     </div>
+                    {% endif %}
                     <div class="d-flex gap-2">
                         <input type="file" name="work_photos_fountain" multiple accept="image/*"
                                class="form-control form-control-sm" style="max-width:55%;">
@@ -314,7 +324,7 @@
     </div>
 
     <!-- Row 4: 편익시설 매출 | 세부 이용현황 -->
-    <div class="row g-3 pair-row">
+    <div class="row g-4 pair-row mb-4">
         <div class="col-lg-6">
 
             <!-- 편익시설 매출 -->
@@ -603,7 +613,7 @@
     </style>
 
     <!-- 행사 (풀폭 — 내부/외부 2분할) -->
-    <div class="card shadow-sm mb-3">
+    <div class="card shadow-sm mb-4">
         <div class="card-header fw-semibold bg-light">
             <i class="bi bi-calendar-event"></i> 행사
         </div>
@@ -736,7 +746,7 @@
     </div>
 
     <!-- 특이사항 (풀폭) -->
-    <div class="card shadow-sm mb-3">
+    <div class="card shadow-sm mb-4">
         <div class="card-header fw-semibold bg-light">
             <i class="bi bi-exclamation-circle"></i> 특이사항
         </div>
