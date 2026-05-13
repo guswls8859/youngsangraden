@@ -63,51 +63,64 @@ def fetch_today_entry_count() -> dict | None:
             body_main = page.inner_text('body')
 
             # ── 시간대별 탭 ───────────────────────────────────
-            if not _try_click(page, '#ext-element-707'):
-                _click(page, 'text=시간대별')
-            page.wait_for_timeout(3000)
+            nav_ok = True
+            if not (_try_click(page, '#ext-element-707') or
+                    _try_force_click(page, 'text=시간대별')):
+                logger.warning('GODATA: 시간대별 탭 진입 실패 — 게이트/시간대 데이터 수집 스킵')
+                nav_ok = False
 
-            # ── 구역비교 체크박스 (동적 ID → 텍스트 기반) ────
-            if not _try_click(page, '#O8AD_id-boxLabelEl'):
-                if not _try_force_click(page, 'text=구역비교'):
-                    _force_click(page, 'label:has-text("구역비교")')
-            page.wait_for_timeout(1000)
+            if nav_ok:
+                page.wait_for_timeout(3000)
+                # ── 구역비교 체크박스 (동적 ID → 텍스트 기반) ────
+                if not (_try_click(page, '#O8AD_id-boxLabelEl') or
+                        _try_force_click(page, 'text=구역비교') or
+                        _try_force_click(page, 'label:has-text("구역비교")')):
+                    logger.warning('GODATA: 구역비교 체크박스 클릭 실패 — 데이터 수집 스킵')
+                    nav_ok = False
 
-            # ── 조회 버튼 (동적 ID → 텍스트 기반) ───────────
-            if not _try_click(page, '#O7A8_id-btnEl'):
-                if not _try_force_click(page, 'text=조회'):
-                    _force_click(page, 'button:has-text("조회")')
-            page.wait_for_timeout(5000)
+            if nav_ok:
+                page.wait_for_timeout(1000)
+                # ── 조회 버튼 (동적 ID → 텍스트 기반) ───────────
+                if not (_try_click(page, '#O7A8_id-btnEl') or
+                        _try_force_click(page, 'text=조회') or
+                        _try_force_click(page, 'button:has-text("조회")')):
+                    logger.warning('GODATA: 조회 버튼 클릭 실패 — 데이터 수집 스킵')
+                    nav_ok = False
 
-            # ── 구역별 데이터는 조회 후에 읽는다 ─────────────
-            body = page.inner_text('body')
+            # ── 구역별 데이터는 조회 후에 읽는다 (nav_ok일 때만) ─
+            if nav_ok:
+                page.wait_for_timeout(5000)
+                body = page.inner_text('body')
+            else:
+                body = ''
             browser.close()
-
-        # ── "명" 패턴 전체 수집 → [부출입구, ?, 주출입구, ?] ──
-        found = re.findall(r'[\d,]+\s*명', body)
 
         # ── 입장 총수 파싱 (시간대별 진입 전 body에서) ──────
         m_enter = re.search(r'([\d,]+) 명\n입장\n월간', body_main)
         m_exit  = re.search(r'([\d,]+) 명\n퇴장\n월간', body_main)
 
         if not m_enter:
-            logger.warning('GODATA: 입장 합계 파싱 실패.\n--- body ---\n%s\n---', body)
+            logger.warning('GODATA: 입장 합계 파싱 실패.\n--- body_main ---\n%s\n---', body_main)
             return None
 
-        # ── 주/부출입구 — found 리스트 끝 4개에서 추출 ───────
-        # 평일: found = [부출입구, 부퇴장, 주출입구, 주퇴장] (4개)
-        # 토·일: GODATA가 주간 누적합을 앞에 추가 → 일별 합계는 항상 마지막 4개
-        logger.info('[SLOT-TEST] "명" 패턴 전체(%d개): %s', len(found), found)
-        if len(found) >= 4:
-            sub_gate  = _parse_count(found[-4])  # 부출입구
-            main_gate = _parse_count(found[-2])  # 주출입구
+        # ── 게이트/시간대별 데이터는 nav 성공 시만 파싱 ────────
+        if nav_ok:
+            found = re.findall(r'[\d,]+\s*명', body)
+            logger.info('[SLOT-TEST] "명" 패턴 전체(%d개): %s', len(found), found)
+            # 평일: found = [부출입구, 부퇴장, 주출입구, 주퇴장] (4개)
+            # 토·일: GODATA가 주간 누적합을 앞에 추가 → 일별 합계는 항상 마지막 4개
+            if len(found) >= 4:
+                sub_gate  = _parse_count(found[-4])  # 부출입구
+                main_gate = _parse_count(found[-2])  # 주출입구
+            else:
+                logger.warning('GODATA: "명" 패턴 부족 (%d개) — 주/부출입구 None 처리', len(found))
+                sub_gate  = None
+                main_gate = None
+            time_slots = _parse_time_slots(body)
         else:
-            logger.warning('GODATA: "명" 패턴 부족 (%d개) — 주/부출입구 0으로 처리', len(found))
-            sub_gate  = 0
-            main_gate = 0
-
-        # ── 시간대별 파싱 (테스트) ───────────────────────────
-        time_slots = _parse_time_slots(body)
+            sub_gate   = None
+            main_gate  = None
+            time_slots = None  # None → DB 업데이트 스킵
 
         return {
             'today_total':    _parse_count(m_enter.group(1)),
@@ -115,6 +128,7 @@ def fetch_today_entry_count() -> dict | None:
             'main_gate_walk': main_gate,
             'sub_gate_walk':  sub_gate,
             'time_slots':     time_slots,
+            'nav_ok':         nav_ok,
         }
 
     except Exception as exc:
@@ -150,16 +164,28 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
         ops_existing := OperationsDailyData.objects.filter(report_date=target_date).first()
     ) else 0
 
-    time_slots = data.get('time_slots', {})
-    logger.info('[SLOT-TEST] 저장할 시간대별 데이터: %s', time_slots)
-
+    # ── 항상 갱신 (대시보드에서 안정적으로 읽힘) ──
     godata_fields = {
         'godata_total':   godata_pedestrian,
         'today_total':    godata_pedestrian + car_visit,
-        'main_gate_walk': data.get('main_gate_walk', 0),
-        'sub_gate_walk':  data.get('sub_gate_walk', 0),
-        **time_slots,
     }
+
+    # ── nav 성공 시에만 게이트/시간대 데이터 갱신 ──
+    if data.get('nav_ok'):
+        main_g = data.get('main_gate_walk')
+        sub_g  = data.get('sub_gate_walk')
+        if main_g is not None:
+            godata_fields['main_gate_walk'] = main_g
+        if sub_g is not None:
+            godata_fields['sub_gate_walk']  = sub_g
+        time_slots = data.get('time_slots') or {}
+        if time_slots:
+            logger.info('[SLOT-TEST] 저장할 시간대별 데이터: %s', time_slots)
+            godata_fields.update(time_slots)
+    else:
+        logger.warning(
+            'GODATA: 시간대별 페이지 진입 실패 — 게이트/시간대 필드는 기존 값 유지'
+        )
 
     ops, created = OperationsDailyData.objects.get_or_create(
         report_date=target_date,
@@ -172,13 +198,14 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
         ops.save(update_fields=list(godata_fields.keys()) + ['updated_at'])
 
     logger.info(
-        'GODATA 동기화 완료: %s 도보=%d 차량=%d 입장총수=%d 주출입구=%d 부출입구=%d (신규=%s)',
+        'GODATA 동기화 완료: %s 도보=%d 차량=%d 입장총수=%d 주출입구=%s 부출입구=%s nav=%s (신규=%s)',
         target_date,
         godata_pedestrian,
         car_visit,
         godata_pedestrian + car_visit,
-        data.get('main_gate_walk', 0),
-        data.get('sub_gate_walk', 0),
+        data.get('main_gate_walk') if data.get('nav_ok') else '미수집',
+        data.get('sub_gate_walk')  if data.get('nav_ok') else '미수집',
+        data.get('nav_ok'),
         created,
     )
     return True
