@@ -30,9 +30,12 @@ for _pfx, _uri in _NS_MAP.items():
     ET.register_namespace(_pfx, _uri)
 
 HP = 'http://www.hancom.co.kr/hwpml/2011/paragraph'
-NS = {'hp': HP}
+HC = 'http://www.hancom.co.kr/hwpml/2011/core'
+NS = {'hp': HP, 'hc': HC}
 
-BASE_HWPX = Path(__file__).parent / 'data' / 'base_report.hwpx'
+BASE_HWPX     = Path(__file__).parent / 'data' / 'base_report.hwpx'
+SAMPLE2_HWPX  = Path(__file__).parent / 'data' / 'sample2.hwpx'   # 내부행사 표 템플릿
+SAMPLE1_HWPX  = Path(__file__).parent / 'data' / 'sample1.hwpx'   # 작업사진 섹션 템플릿
 
 
 # ── 헬퍼 함수 ─────────────────────────────────────────────────────────────────
@@ -59,6 +62,23 @@ def _fmt_num(n):
         return f"{int(n):,}"
     except (TypeError, ValueError):
         return '0'
+
+
+def _bulletize(text):
+    """각 줄 앞에 '○ ' 자동 부착 (이미 '○'로 시작하면 건너뜀)."""
+    if not text:
+        return ''
+    lines = []
+    for raw in text.split('\n'):
+        s = raw.strip()
+        if not s:
+            lines.append('')
+            continue
+        if s.startswith('○'):
+            lines.append(s)
+        else:
+            lines.append(f'○ {s}')
+    return '\n'.join(lines)
 
 
 def _sf_val(slot, key):
@@ -154,13 +174,165 @@ def _find_main_table(sec_root):
     raise ValueError("section0.xml에서 메인 테이블을 찾을 수 없습니다.")
 
 
+# ── 행사 표 템플릿 (sample2 row13 cell1의 nested 테이블) ───────────────────
+def _load_event_template():
+    """sample2에서 (행사명 단락, 4열 nested 테이블) 템플릿을 가져온다."""
+    with zipfile.ZipFile(SAMPLE2_HWPX, 'r') as z:
+        root = ET.fromstring(z.read('Contents/section0.xml'))
+    main_tbl = _find_main_table(root)
+    cell = main_tbl.findall('hp:tr', NS)[13].findall('hp:tc', NS)[1]
+    sl = cell.find('hp:subList', NS)
+    paras = sl.findall('hp:p', NS)
+    # paras[0] = 행사명 단락 ("○ 늘봄 학교")
+    # paras[1] = run 안에 nested tbl + tail 텍스트
+    return paras[0], paras[1]
+
+
+# 모듈 로드 시 1회만 파싱
+try:
+    _EV_NAME_TPL, _EV_BODY_TPL = _load_event_template()
+except Exception:
+    _EV_NAME_TPL, _EV_BODY_TPL = None, None
+
+
+def _set_para_text(para, text):
+    """단락의 첫 hp:t에 텍스트 설정. 없으면 만들어 넣음."""
+    run = para.find('hp:run', NS)
+    if run is None:
+        return
+    t = run.find('hp:t', NS)
+    if t is None:
+        t = ET.SubElement(run, f'{{{HP}}}t')
+    for ch in list(t):
+        t.remove(ch)
+    t.text = text
+
+
+def _make_event_blocks(events):
+    """internal_events 리스트 → (단락, 단락, …) 리스트 반환.
+    각 행사마다 이름 단락 + 표 단락 2개를 만든다."""
+    from copy import deepcopy
+    blocks = []
+    if not events or _EV_NAME_TPL is None:
+        return blocks
+
+    for ev in events:
+        # 1) 이름 단락
+        name_para = deepcopy(_EV_NAME_TPL)
+        _set_para_text(name_para, f'○ {ev.name}')
+        blocks.append(name_para)
+
+        cols = ev.columns_json or []
+        if not cols:
+            continue
+
+        # 2) 표 단락 (4열 템플릿 → 사용자 컬럼 수에 맞춰 조정)
+        body_para = deepcopy(_EV_BODY_TPL)
+        run = body_para.find('hp:run', NS)
+        tbl = run.find('hp:tbl', NS) if run is not None else None
+        if tbl is None:
+            blocks.append(body_para)
+            continue
+
+        rows = tbl.findall('hp:tr', NS)
+        if len(rows) < 2:
+            blocks.append(body_para)
+            continue
+        header_row, data_row = rows[0], rows[1]
+        tpl_header_cell = header_row.findall('hp:tc', NS)[0]
+        tpl_data_cell   = data_row.findall('hp:tc', NS)[0]
+
+        # 기존 셀 모두 제거
+        for tc in header_row.findall('hp:tc', NS):
+            header_row.remove(tc)
+        for tc in data_row.findall('hp:tc', NS):
+            data_row.remove(tc)
+
+        # 새 셀 추가
+        N         = len(cols)
+        total_w   = int(tbl.get('cellSpacing', '0'))  # not the right one; we'll use sz
+        sz_el     = tbl.find('hp:sz', NS)
+        total_w   = int(sz_el.get('width')) if sz_el is not None else 36056
+        cell_w    = total_w // N
+
+        def _make_cell(template_cell, col_addr, text, width):
+            from copy import deepcopy
+            new_tc = deepcopy(template_cell)
+            # cellAddr
+            ca = new_tc.find('hp:cellAddr', NS)
+            if ca is not None:
+                ca.set('colAddr', str(col_addr))
+            # cellSz width
+            cs = new_tc.find('hp:cellSz', NS)
+            if cs is not None:
+                cs.set('width', str(width))
+            # text
+            sub_p = new_tc.find('hp:subList/hp:p', NS)
+            if sub_p is not None:
+                _set_para_text(sub_p, text)
+            return new_tc
+
+        for i, col in enumerate(cols):
+            header_row.append(_make_cell(tpl_header_cell, i, (col.get('header') or '').strip(), cell_w))
+            data_row.append  (_make_cell(tpl_data_cell,   i, (col.get('value')  or '').strip(), cell_w))
+
+        # colCnt 갱신
+        tbl.set('colCnt', str(N))
+
+        blocks.append(body_para)
+
+    return blocks
+
+
 # ── 메인 함수 ─────────────────────────────────────────────────────────────────
 
 def build_integrated_daily_hwpx(
     target_date, ops, sf_slots, eoulrim, jamjam, kumnare,
-    info_report, info_shuttle_items=None, info_patrol_items=None, total_sales=0
+    info_report, info_shuttle_items=None, info_patrol_items=None, total_sales=0,
+    internal_events=None, external_events=None, work_photos=None,
 ):
-    """일일보고 HWPX 파일의 bytes를 반환한다."""
+    """일일보고 HWPX 파일의 bytes를 반환한다.
+
+    internal_events : list[InternalEvent] — DB의 내부행사 (없으면 ops.internal_events 자동 조회)
+    external_events : list[ExternalEvent] — DB의 외부행사 (없으면 ops.external_events 자동 조회)
+    work_photos     : list[FacilityWorkPhoto] — 작업사진 (없으면 ops.work_photos 자동 조회)
+    """
+    # 0. 관련 객체 조회 (명시적 인자 없으면 ops에서 가져옴)
+    if internal_events is None:
+        try:
+            internal_events = list(ops.internal_events.all().order_by('order')) if hasattr(ops, 'internal_events') else []
+        except Exception:
+            internal_events = []
+    if external_events is None:
+        try:
+            external_events = list(ops.external_events.all().order_by('order')) if hasattr(ops, 'external_events') else []
+        except Exception:
+            external_events = []
+    if work_photos is None:
+        try:
+            work_photos = list(ops.work_photos.all().order_by('order')) if hasattr(ops, 'work_photos') else []
+        except Exception:
+            work_photos = []
+
+    # 카테고리별 분리 (interior/outdoor/fountain)
+    photos_by_cat = {'interior': [], 'outdoor': [], 'fountain': []}
+    for wp in work_photos:
+        cat = getattr(wp, 'category', 'interior') or 'interior'
+        if cat in photos_by_cat:
+            photos_by_cat[cat].append(wp)
+
+    captions_by_cat = {
+        'interior': _v(ops, 'facility_interior_caption', ''),
+        'outdoor' : _v(ops, 'facility_outdoor_caption',  ''),
+        'fountain': _v(ops, 'facility_fountain_caption', ''),
+    }
+    headers_by_cat = {
+        'interior': '내부시설 작업사진',
+        'outdoor' : '잔디마당·가로수길·전망언덕 작업사진',
+        'fountain': '분수정원·잼잼카페 작업사진',
+    }
+
+    has_any_photos = any(photos_by_cat.values())
 
     # 1. 데이터 정리
     today_total   = _v(ops, 'today_total')
@@ -182,9 +354,12 @@ def build_integrated_daily_hwpx(
     evt_external  = _v(ops, 'external_event', '')
     special       = _v(ops, 'special_notes', '')
 
-    eoulrim_s = getattr(eoulrim, 'daily_net_sales', 0) or 0
-    jamjam_s  = getattr(jamjam,  'daily_net_sales', 0) or 0
-    kumnare_s = getattr(kumnare, 'sales_amount',    0) or 0
+    eoulrim_s = (getattr(eoulrim, 'daily_net_sales', 0) or 0) \
+                 if eoulrim else _v(ops, 'manual_eoulrim_sales')
+    jamjam_s  = (getattr(jamjam,  'daily_net_sales', 0) or 0) \
+                 if jamjam  else _v(ops, 'manual_jamjam_sales')
+    kumnare_s = (getattr(kumnare, 'sales_amount',    0) or 0) \
+                 if kumnare else _v(ops, 'manual_kumnare_sales')
 
     # info_report / info_shuttle_items / info_patrol_items / total_sales:
     # 현재 HWPX 양식에는 해당 섹션이 없어 사용하지 않음 (PDF용 파라미터)
@@ -197,8 +372,9 @@ def build_integrated_daily_hwpx(
     while len(bb_rows) < 2:
         bb_rows.append({'label': '', 'baseball': {}, 'total': {}})
 
-    # 2. 기반 HWPX에서 section0.xml 읽기
-    with zipfile.ZipFile(BASE_HWPX, 'r') as zin:
+    # 2. 기반 HWPX 선택 — 사진이 하나라도 있으면 sample1(스타일 superset + 사진 단락 포함)
+    src_path = SAMPLE1_HWPX if has_any_photos else BASE_HWPX
+    with zipfile.ZipFile(src_path, 'r') as zin:
         sec0_bytes = zin.read('Contents/section0.xml')
 
     root = ET.fromstring(sec0_bytes)
@@ -250,11 +426,11 @@ def build_integrated_daily_hwpx(
     cells_r7 = rows[7].findall('hp:tc', NS)
     # cells_r7[2] = col 5 (content)
     if len(cells_r7) >= 3:
-        _set_cell_lines(cells_r7[2], fac_interior)
+        _set_cell_lines(cells_r7[2], _bulletize(fac_interior))
 
     # ── Row 8: 잔디마당·가로수길·전망언덕 ─────────────────────────────────────
     cells_r8 = rows[8].findall('hp:tc', NS)
-    _set_cell_lines(cells_r8[1], fac_outdoor)
+    _set_cell_lines(cells_r8[1], _bulletize(fac_outdoor))
 
     # ── Row 9: 스포츠필드 (중첩 테이블 값만 교체) ────────────────────────────
     cells_r9 = rows[9].findall('hp:tc', NS)
@@ -296,7 +472,7 @@ def build_integrated_daily_hwpx(
 
     # ── Row 10: 분수정원·잼잼카페 ─────────────────────────────────────────────
     cells_r10 = rows[10].findall('hp:tc', NS)
-    _set_cell_lines(cells_r10[1], fac_fountain)
+    _set_cell_lines(cells_r10[1], _bulletize(fac_fountain))
 
     # ── Row 11: 주차장 (중첩 테이블) ─────────────────────────────────────────
     cells_r11 = rows[11].findall('hp:tc', NS)
@@ -325,18 +501,59 @@ def build_integrated_daily_hwpx(
 
     # ── Row 13: 내부행사/프로그램 ─────────────────────────────────────────────
     cells_r13 = rows[13].findall('hp:tc', NS)
-    _set_cell_lines(cells_r13[1], evt_internal)
+    if internal_events:
+        # sample2와 동일한 구조 — 각 행사마다 (이름 단락 + 4열 표)
+        cell13 = cells_r13[1]
+        sl13 = cell13.find('hp:subList', NS)
+        if sl13 is not None:
+            # 기존 단락 제거 후 새 블록 삽입
+            for p_old in sl13.findall('hp:p', NS):
+                sl13.remove(p_old)
+            for block in _make_event_blocks(internal_events):
+                sl13.append(block)
+    else:
+        _set_cell_lines(cells_r13[1], evt_internal)
 
     # ── Row 14: 외부행사 ──────────────────────────────────────────────────────
     cells_r14 = rows[14].findall('hp:tc', NS)
-    _set_cell_lines(cells_r14[1], evt_external)
+    if external_events:
+        cell14 = cells_r14[1]
+        sl14 = cell14.find('hp:subList', NS)
+        if sl14 is not None:
+            for p_old in sl14.findall('hp:p', NS):
+                sl14.remove(p_old)
+            for block in _make_event_blocks(external_events):
+                sl14.append(block)
+    else:
+        _set_cell_lines(cells_r14[1], evt_external)
 
-    # ── Row 15: 특이사항 ──────────────────────────────────────────────────────
+    # ── Row 15: 특이사항 + 세부 이용현황 (셔틀/대여/스탬프) ─────────────────────
     # cell1에 '○ 세부 이용현황' 단락과 내부 테이블이 있으므로
     # 특이사항 텍스트를 그 앞에 삽입한다
     cells_r15 = rows[15].findall('hp:tc', NS)
     c15 = cells_r15[1]
     sl15 = c15.find('hp:subList', NS)
+
+    # 세부 이용현황 값 결정 (보고서 우선, 없으면 수기값)
+    shuttle_n = (info_report.shuttle_total if info_report else None) or _v(ops, 'manual_shuttle_total')
+    rental_n  = (kumnare.rental_total_users if kumnare else None) or _v(ops, 'manual_rental_total')
+    stamp_n   = (kumnare.stamp_issued       if kumnare else None) or _v(ops, 'manual_stamp_total')
+
+    # 세부 이용현황 내부 표 값 채우기 (행 1 = 데이터 행)
+    if sl15 is not None:
+        for para_in_15 in sl15.findall('hp:p', NS):
+            inner_tbl = para_in_15.find('hp:run/hp:tbl', NS)
+            if inner_tbl is None:
+                continue
+            inner_rows = inner_tbl.findall('hp:tr', NS)
+            if len(inner_rows) < 2:
+                continue
+            data_cells = inner_rows[1].findall('hp:tc', NS)
+            if len(data_cells) >= 3:
+                _set_t(data_cells[0], f'{_fmt_num(shuttle_n)}명')
+                _set_t(data_cells[1], f'{_fmt_num(rental_n)}명')
+                _set_t(data_cells[2], f'{_fmt_num(stamp_n)}명')
+            break  # 첫 번째 nested table만 처리
     if sl15 is not None and special:
         existing15 = sl15.findall('hp:p', NS)
         first_p15 = existing15[0] if existing15 else None
@@ -355,19 +572,295 @@ def build_integrated_daily_hwpx(
             new_t.text = line or None
             sl15.insert(insert_idx + i, new_p)
 
+    # ── 작업사진: 카테고리별 photo 단락 3개 (있는 것만) ──────
+    photo_assets   = {}
+    manifest_items = []
+    unused_ids     = set()
+    if has_any_photos:
+        photo_assets, manifest_items, unused_ids = _attach_work_photos_multi(
+            root, photos_by_cat, captions_by_cat, headers_by_cat,
+        )
+
     # 3. section0.xml 직렬화
     xml_decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
     sec0_new = (xml_decl + ET.tostring(root, encoding='unicode')).encode('utf-8')
 
-    # 4. 새 HWPX ZIP 조립
+    # 4. 새 HWPX ZIP 조립 — source는 사진 유무에 따라 sample1/base
+    # 사용 안 한 image ID는 BinData에서 제외하고 manifest에서도 제거
+    unused_files = {f'BinData/{i}.jpeg' for i in unused_ids}
+    # 사용자가 추가한 이미지 중 source에 없는 것 (image5+)
+    src_names = set()
     out = io.BytesIO()
-    with zipfile.ZipFile(BASE_HWPX, 'r') as zin:
+    with zipfile.ZipFile(src_path, 'r') as zin:
+        src_names = set(zin.namelist())
         with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
+                if item.filename in unused_files:
+                    continue
                 if item.filename == 'Contents/section0.xml':
                     zout.writestr(item, sec0_new)
+                elif item.filename in photo_assets:
+                    zout.writestr(item, photo_assets[item.filename])
+                elif item.filename == 'Contents/content.hpf':
+                    hpf_xml = zin.read(item.filename).decode('utf-8')
+                    if unused_ids:
+                        hpf_xml = _strip_manifest_items(hpf_xml, unused_ids)
+                    # source에 없던 신규 image들 manifest 항목 추가
+                    extra_items = [
+                        {'id': fname.split('/')[-1].rsplit('.', 1)[0],
+                         'href': fname,
+                         'media_type': 'image/jpeg'}
+                        for fname in photo_assets
+                        if fname not in src_names
+                    ]
+                    if extra_items:
+                        hpf_xml = _inject_manifest_items(hpf_xml, extra_items)
+                    if manifest_items:
+                        hpf_xml = _inject_manifest_items(hpf_xml, manifest_items)
+                    zout.writestr(item, hpf_xml.encode('utf-8'))
                 else:
                     zout.writestr(item, zin.read(item.filename))
+            # source에 없던 신규 이미지 추가
+            for fname, data in photo_assets.items():
+                if fname not in src_names:
+                    zout.writestr(fname, data)
 
     out.seek(0)
     return out.read()
+
+
+def _strip_manifest_items(hpf_xml, unused_ids):
+    """content.hpf의 manifest에서 미사용 image id들에 해당하는 opf:item을 제거."""
+    import re
+    for img_id in unused_ids:
+        pattern = rf'<opf:item\s+id="{re.escape(img_id)}"[^>]*?/>'
+        hpf_xml = re.sub(pattern, '', hpf_xml)
+    return hpf_xml
+
+
+# ── 작업사진 처리 헬퍼 ─────────────────────────────────────────────────────────
+
+def _attach_work_photos_multi(root, photos_by_cat, captions_by_cat, headers_by_cat):
+    """카테고리별로 작업사진 단락을 root에 부착.
+
+    sample1 base에 이미 있는 photo 단락(image1~image4 사용)을 템플릿으로 deepcopy 후
+    카테고리별로 클론·수정해서 append. 사진 ID는 글로벌 카운터(image1, image2, ...).
+
+    Returns:
+        photo_assets   : {'BinData/imageN.jpeg': bytes, ...} — 사용자 사진 + sample1 원본 덮어쓰기
+        manifest_items : []  (manifest 추가는 빌더에서 처리)
+        unused_ids     : 미사용 템플릿 image ID (예: 총 2장만 쓰면 image3, image4가 미사용)
+    """
+    from copy import deepcopy
+
+    photo_assets = {}
+
+    paras = root.findall('hp:p', NS)
+    if len(paras) < 2:
+        return photo_assets, [], set()
+    photo_para_template = paras[1]
+    template_copy = deepcopy(photo_para_template)
+    root.remove(photo_para_template)
+
+    image_idx_counter = [1]   # 글로벌 image 카운터
+
+    for cat in ('interior', 'outdoor', 'fountain'):
+        photos = photos_by_cat.get(cat) or []
+        if not photos:
+            continue
+        para = deepcopy(template_copy)
+        _fill_photo_paragraph(
+            para, photos, captions_by_cat.get(cat, ''), headers_by_cat.get(cat, '작업사진'),
+            photo_assets, image_idx_counter,
+        )
+        root.append(para)
+
+    # 템플릿(sample1)이 가진 image1~image4 중에서 글로벌 카운터가 도달 못 한 ID는 미사용
+    total_used = image_idx_counter[0] - 1
+    unused_ids = {f'image{i}' for i in range(total_used + 1, 5)}
+
+    return photo_assets, [], unused_ids
+
+
+def _fill_photo_paragraph(para, photos, caption, header_text,
+                          photo_assets, image_idx_counter):
+    """한 카테고리의 photo 단락을 채운다. para는 sample1 템플릿 deepcopy."""
+    photo_tbl = para.find('hp:run/hp:tbl', NS)
+    if photo_tbl is None:
+        return
+
+    rows = photo_tbl.findall('hp:tr', NS)
+    if len(rows) < 3:
+        return
+
+    header_row  = rows[0]
+    img_rows    = rows[1:-1]
+    caption_row = rows[-1]
+
+    # 헤더 텍스트
+    header_p = header_row.findall('hp:tc', NS)[0].find('hp:subList/hp:p', NS)
+    if header_p is not None:
+        _set_para_text(header_p, header_text)
+
+    # 사진 셀 수집
+    pic_cells = []
+    for r in img_rows:
+        for tc in r.findall('hp:tc', NS):
+            pic = tc.find('.//hp:pic', NS)
+            if pic is not None:
+                pic_cells.append((tc, pic))
+
+    used = 0
+    for idx, wp in enumerate(photos):
+        if idx >= len(pic_cells):
+            break
+        tc, pic = pic_cells[idx]
+        img_elem = pic.find('hc:img', NS)
+        if img_elem is None:
+            continue
+        try:
+            wp.image.open('rb')
+            data = wp.image.read()
+            wp.image.close()
+        except Exception:
+            continue
+        new_id = f'image{image_idx_counter[0]}'
+        image_idx_counter[0] += 1
+        img_elem.set('binaryItemIDRef', new_id)
+        photo_assets[f'BinData/{new_id}.jpeg'] = data
+        used += 1
+
+    # 빈 이미지 행 통째로 삭제
+    PER_ROW = 2
+    needed_rows = (used + PER_ROW - 1) // PER_ROW
+    for r in img_rows[needed_rows:]:
+        photo_tbl.remove(r)
+    remaining = img_rows[:needed_rows]
+    cells_in_last = used - (needed_rows - 1) * PER_ROW if needed_rows else 0
+    if remaining and cells_in_last < PER_ROW:
+        last_row = remaining[-1]
+        last_cells = last_row.findall('hp:tc', NS)
+        for c in last_cells[cells_in_last:]:
+            last_row.remove(c)
+    photo_tbl.set('rowCnt', str(1 + needed_rows + 1))
+
+    # 캡션
+    cap_cell = caption_row.findall('hp:tc', NS)[0]
+    cap_p = cap_cell.find('hp:subList/hp:p', NS)
+    if cap_p is not None:
+        _set_para_text(cap_p, caption or '')
+
+
+def _attach_work_photos(root, work_photos, caption):
+    """sample1을 base로 사용 중일 때 photo 단락의 이미지/캡션을 사용자 데이터로 교체.
+
+    root            : section0의 ET 루트 (sample1 기반 — 이미 photo 단락 포함)
+    work_photos     : Django FacilityWorkPhoto 인스턴스 리스트
+    caption         : 캡션 텍스트
+
+    Returns:
+        photo_assets   : {'BinData/imageN.ext': bytes, ...}  사용자 사진 (덮어쓰기)
+        manifest_items : []
+        unused_ids     : set of image IDs to EXCLUDE from output (e.g. {'image3', 'image4'})
+    """
+    photo_assets = {}
+    manifest_items = []
+    unused_ids = set()
+
+    paras = root.findall('hp:p', NS)
+    if len(paras) < 2:
+        return photo_assets, manifest_items, unused_ids
+    photo_para = paras[1]
+    photo_tbl = photo_para.find('hp:run/hp:tbl', NS)
+    if photo_tbl is None:
+        return photo_assets, manifest_items, unused_ids
+
+    rows = photo_tbl.findall('hp:tr', NS)
+    if len(rows) < 3:
+        return photo_assets, manifest_items, unused_ids
+
+    img_rows    = rows[1:-1]
+    caption_row = rows[-1]
+
+    # 사진 셀 수집
+    pic_cells = []
+    for r in img_rows:
+        for tc in r.findall('hp:tc', NS):
+            pic = tc.find('.//hp:pic', NS)
+            if pic is not None:
+                pic_cells.append((tc, pic))
+
+    used = 0
+    for idx, wp in enumerate(work_photos):
+        if idx >= len(pic_cells):
+            break
+        tc, pic = pic_cells[idx]
+        img_elem = pic.find('hc:img', NS)
+        if img_elem is None:
+            continue
+        # 사용자 사진 바이트 읽기
+        try:
+            f = wp.image.open('rb')
+            data = wp.image.read()
+            wp.image.close()
+        except Exception:
+            continue
+        # sample1의 BinData/imageN.jpeg를 동일 이름으로 덮어쓰기
+        img_id = img_elem.get('binaryItemIDRef')  # 'image1'~'image4'
+        if not img_id:
+            continue
+        # 원본 sample1과 동일하게 .jpeg 확장자 사용 (HWPX는 binItemIDRef로만 매칭)
+        fname = f'BinData/{img_id}.jpeg'
+        photo_assets[fname] = data
+        used += 1
+
+    # 남는 셀의 미사용 image ID 수집 (BinData/manifest 정리용)
+    for idx in range(used, len(pic_cells)):
+        tc, pic = pic_cells[idx]
+        img_elem = pic.find('hc:img', NS)
+        if img_elem is not None:
+            unused_id = img_elem.get('binaryItemIDRef')
+            if unused_id:
+                unused_ids.add(unused_id)
+
+    # ── 빈 이미지 행 통째로 삭제 (한 행=2셀 단위) ────────────
+    # 사용 셀 수에 따라 필요한 행 수만 남기고 제거
+    PER_ROW = 2
+    needed_rows = (used + PER_ROW - 1) // PER_ROW  # ceil(used/2)
+    remove_rows = img_rows[needed_rows:]
+    for r in remove_rows:
+        photo_tbl.remove(r)
+
+    # 남긴 마지막 행에서 사용 안 한 셀(예: 사진 1장만 → 두번째 셀)도 제거
+    remaining_img_rows = img_rows[:needed_rows]
+    cells_used_in_last_row = used - (needed_rows - 1) * PER_ROW if needed_rows else 0
+    if remaining_img_rows and cells_used_in_last_row < PER_ROW:
+        last_row = remaining_img_rows[-1]
+        last_row_cells = last_row.findall('hp:tc', NS)
+        # 사용한 셀만 남기고 나머지 제거
+        for c in last_row_cells[cells_used_in_last_row:]:
+            last_row.remove(c)
+
+    # 테이블의 rowCnt 갱신
+    new_row_count = 1 + needed_rows + 1  # 헤더 + 이미지 행 + 캡션
+    photo_tbl.set('rowCnt', str(new_row_count))
+
+    # 캡션 갱신
+    cap_cell = caption_row.findall('hp:tc', NS)[0]
+    cap_p = cap_cell.find('hp:subList/hp:p', NS)
+    if cap_p is not None:
+        _set_para_text(cap_p, caption or '')
+
+    return photo_assets, manifest_items, unused_ids
+
+
+def _inject_manifest_items(hpf_xml, items):
+    """content.hpf의 <opf:manifest> 안에 image 아이템들을 삽입."""
+    insert_block = ''
+    for it in items:
+        insert_block += (
+            f'<opf:item id="{it["id"]}" href="{it["href"]}" '
+            f'media-type="{it["media_type"]}" isEmbeded="1"/>'
+        )
+    # </opf:manifest> 앞에 삽입
+    return hpf_xml.replace('</opf:manifest>', insert_block + '</opf:manifest>')

@@ -4,6 +4,45 @@
 
 ---
 
+## [0.6.0] - 2026-05-13
+
+### 추가
+- **일일보고 폼 — 편익시설 매출 / 세부 이용현황 수기 입력** — 해당 시설(`EoulrimReport`/`JamjamReport`/`KumnareReport`) 또는 안내센터(`InfoReport`) 보고서가 없는 날에 직접 수기 입력 가능
+  - `OperationsDailyData`에 `manual_eoulrim_sales`, `manual_jamjam_sales`, `manual_kumnare_sales` + `manual_shuttle_total`, `manual_rental_total`, `manual_stamp_total` 추가
+  - 자동 보고서 우선, 없으면 수기값 fallback (HWPX 출력에도 동일 적용)
+  - 입력값 콤마 자동 포맷팅 (서버에서 콤마 제거 후 정수 변환)
+- **내부행사 / 외부행사 동적 항목** — 행사명 + 사용자 정의 컬럼(헤더/값) 자유 추가 UI
+  - 새 모델 `InternalEvent`, `ExternalEvent` (둘 다 `columns_json`으로 자유 컬럼 저장)
+  - 폼에서 가로 표 형식 렌더링, 헤더 input 안쪽에 컬럼 삭제 ✕ 오버레이
+  - HWPX 출력: sample2 nested table 템플릿 기반, N열 자동 조정
+- **운영관리 작업사진 (구역별)** — 내부시설/잔디마당/분수정원 각각에 사진 N장 업로드 + 캡션 입력
+  - 새 모델 `FacilityWorkPhoto` (category: interior/outdoor/fountain)
+  - `OperationsDailyData`에 `facility_*_caption` 3개 필드 추가
+  - HWPX 출력: sample1 기반, 카테고리별 사진 표(헤더 + 2열 이미지 + 캡션) 메인 표 뒤에 추가
+  - 사진 ID 글로벌 카운터로 BinData/manifest 동기화, 미사용 ID 자동 제거
+  - 사진 1장만 있을 때 빈 셀/빈 행 자동 제거
+- **HWPX 자동 부착 — "○" 접두사** — 내부시설/잔디마당/분수정원 작업내용 텍스트 줄마다 "○ " 자동 부착
+- **HWPX 세부 이용현황 값 채우기** — 메인 표 row 15 nested table(셔틀버스/대여물품/스탬프투어)에 보고서 값 또는 수기값 출력
+- **Django admin UI 구성** — 모든 앱(parking/reports/info/facilities/sportsfield)에 ModelAdmin 등록
+  - `OperationsDailyData` admin에 fieldset 섹션화 + 작업사진/이벤트 인라인 + 사진 미리보기 썸네일
+  - admin 사이트 헤더 "용산어린이정원 운영관리 시스템"으로 변경
+
+### 변경
+- **Whitenoise 정적파일 서빙** — 운영(`DEBUG=False`) 환경에서 admin UI가 깨지던 문제 해결
+  - `requirements.txt`에 `whitenoise==6.8.2` 추가, `WhiteNoiseMiddleware` + `CompressedManifestStaticFilesStorage` 설정
+- **일일보고 폼 레이아웃 재구성** — 좌·우 컬럼 페어 row 방식으로 변경
+  - Row 1: 금일 방문현황 | 내부시설
+  - Row 2: 전일·기상 | 잔디마당
+  - Row 3: 주차장 | 분수정원
+  - Row 4: 편익시설 매출 | 세부 이용현황
+  - 풀폭: 행사 (내부/외부 2분할) → 특이사항
+  - `align-items: flex-start`로 카드를 자연 콘텐츠 크기 유지
+
+### 마이그레이션
+- `reports/migrations/0010` ~ `0014` (OperationsDailyData 필드 추가, InternalEvent/ExternalEvent/FacilityWorkPhoto 모델 생성)
+
+---
+
 ## [0.5.0] - 2026-05-13
 
 ### 변경

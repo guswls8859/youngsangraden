@@ -81,17 +81,25 @@
     </div>
 </div>
 
-<form method="post" action="?date={{ target_date|date:'Y-m-d' }}">
+<form method="post" action="?date={{ target_date|date:'Y-m-d' }}" enctype="multipart/form-data">
     {% csrf_token %}
     <input type="hidden" name="date" value="{{ target_date|date:'Y-m-d' }}">
+    <input type="hidden" name="internal_events_json" id="id_internal_events_json" value="">
+    <input type="hidden" name="external_events_json" id="id_external_events_json" value="">
 
-    <div class="row g-3">
+    <style>
+    /* 작업사진 영역: 사진 유무와 무관하게 동일 높이 확보 */
+    .photo-gallery { min-height: 86px; align-content: flex-start; }
+    /* 페어 row의 두 컬럼은 row 위에서 정렬 (강제 stretch 없음) */
+    .pair-row { align-items: flex-start; }
+    </style>
 
-        <!-- 좌측 컬럼 -->
+    <!-- Row 1: 금일 방문현황 | 내부시설 -->
+    <div class="row g-3 pair-row">
         <div class="col-lg-6">
 
             <!-- 금일 방문현황 -->
-            <div class="card shadow-sm mb-3">
+            <div class="card shadow-sm">
                 <div class="card-header fw-semibold bg-light">
                     <i class="bi bi-people"></i> 금일 방문현황
                 </div>
@@ -145,8 +153,43 @@
                 </div>
             </div>
 
+        </div>
+        <div class="col-lg-6">
+            <!-- 내부시설 -->
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-clipboard-check"></i> 내부시설 (용산서가, 전시관 등)
+                </div>
+                <div class="card-body">
+                    <textarea name="facility_interior" class="form-control form-control-sm mb-2" rows="2"
+                              placeholder="점검 및 작업 내용">{{ ops.facility_interior|default:'' }}</textarea>
+                    <div class="d-flex flex-wrap gap-2 mb-2 photo-gallery">
+                        {% for wp in work_photos_interior %}
+                        <div class="position-relative work-photo-item" style="width:80px;">
+                            <img src="{{ wp.image.url }}" class="img-thumbnail" style="width:80px;height:80px;object-fit:cover;">
+                            <button type="button" class="photo-x-btn" onclick="toggleDeletePhoto(this, {{ wp.id }})">×</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <input type="file" name="work_photos_interior" multiple accept="image/*"
+                               class="form-control form-control-sm" style="max-width:55%;">
+                        <input type="text" name="facility_interior_caption"
+                               class="form-control form-control-sm"
+                               placeholder="사진 캡션 (예: 노후 배너 교체)"
+                               value="{{ ops.facility_interior_caption|default:'' }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: 전일 방문현황 | 잔디마당 -->
+    <div class="row g-3 pair-row">
+        <div class="col-lg-6">
+
             <!-- 전일 방문현황 + 기상 -->
-            <div class="card shadow-sm mb-3">
+            <div class="card shadow-sm">
                 <div class="card-header fw-semibold bg-light">
                     <i class="bi bi-cloud-sun"></i> 전일 방문현황 / 명일 기상상황
                 </div>
@@ -173,8 +216,43 @@
                 </div>
             </div>
 
+        </div>
+        <div class="col-lg-6">
+            <!-- 잔디마당·가로수길·전망언덕 -->
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-tree"></i> 잔디마당 · 가로수길 · 전망언덕
+                </div>
+                <div class="card-body">
+                    <textarea name="facility_outdoor" class="form-control form-control-sm mb-2" rows="2"
+                              placeholder="점검 및 작업 내용">{{ ops.facility_outdoor|default:'' }}</textarea>
+                    <div class="d-flex flex-wrap gap-2 mb-2 photo-gallery">
+                        {% for wp in work_photos_outdoor %}
+                        <div class="position-relative work-photo-item" style="width:80px;">
+                            <img src="{{ wp.image.url }}" class="img-thumbnail" style="width:80px;height:80px;object-fit:cover;">
+                            <button type="button" class="photo-x-btn" onclick="toggleDeletePhoto(this, {{ wp.id }})">×</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <input type="file" name="work_photos_outdoor" multiple accept="image/*"
+                               class="form-control form-control-sm" style="max-width:55%;">
+                        <input type="text" name="facility_outdoor_caption"
+                               class="form-control form-control-sm"
+                               placeholder="사진 캡션"
+                               value="{{ ops.facility_outdoor_caption|default:'' }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 3: 주차장 | 분수정원 -->
+    <div class="row g-3 pair-row">
+        <div class="col-lg-6">
+
             <!-- 주차장 -->
-            <div class="card shadow-sm mb-3">
+            <div class="card shadow-sm">
                 <div class="card-header fw-semibold bg-light">
                     <i class="bi bi-p-circle"></i> 주차장 (대수)
                 </div>
@@ -205,91 +283,466 @@
             </div>
 
         </div>
+        <div class="col-lg-6">
+            <!-- 분수정원·잼잼카페 -->
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold bg-light">
+                    <i class="bi bi-droplet"></i> 분수정원 · 잼잼카페
+                </div>
+                <div class="card-body">
+                    <textarea name="facility_fountain" class="form-control form-control-sm mb-2" rows="2"
+                              placeholder="점검 및 작업 내용">{{ ops.facility_fountain|default:'' }}</textarea>
+                    <div class="d-flex flex-wrap gap-2 mb-2 photo-gallery">
+                        {% for wp in work_photos_fountain %}
+                        <div class="position-relative work-photo-item" style="width:80px;">
+                            <img src="{{ wp.image.url }}" class="img-thumbnail" style="width:80px;height:80px;object-fit:cover;">
+                            <button type="button" class="photo-x-btn" onclick="toggleDeletePhoto(this, {{ wp.id }})">×</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <input type="file" name="work_photos_fountain" multiple accept="image/*"
+                               class="form-control form-control-sm" style="max-width:55%;">
+                        <input type="text" name="facility_fountain_caption"
+                               class="form-control form-control-sm"
+                               placeholder="사진 캡션"
+                               value="{{ ops.facility_fountain_caption|default:'' }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        <!-- 우측 컬럼 -->
+    <!-- Row 4: 편익시설 매출 | 세부 이용현황 -->
+    <div class="row g-3 pair-row">
         <div class="col-lg-6">
 
-            <!-- 운영관리 점검 -->
-            <div class="card shadow-sm mb-3">
+            <!-- 편익시설 매출 -->
+            <div class="card shadow-sm">
                 <div class="card-header fw-semibold bg-light">
-                    <i class="bi bi-clipboard-check"></i> 운영관리 점검 및 작업내용
+                    <i class="bi bi-shop"></i> 편익시설 매출
+                    <span class="small text-muted fw-normal">— 해당 시설 보고서가 없으면 수기 입력</span>
                 </div>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <label class="form-label small fw-medium">내부시설 (용산서가, 전시관 등)</label>
-                        <textarea name="facility_interior" class="form-control form-control-sm" rows="2"
-                                  placeholder="점검 및 작업 내용">{{ ops.facility_interior|default:'' }}</textarea>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-medium">잔디마당 · 가로수길 · 전망언덕</label>
-                        <textarea name="facility_outdoor" class="form-control form-control-sm" rows="2"
-                                  placeholder="점검 및 작업 내용">{{ ops.facility_outdoor|default:'' }}</textarea>
-                    </div>
-                    <div class="mb-0">
-                        <label class="form-label small fw-medium">분수정원 · 잼잼카페</label>
-                        <textarea name="facility_fountain" class="form-control form-control-sm" rows="2"
-                                  placeholder="점검 및 작업 내용">{{ ops.facility_fountain|default:'' }}</textarea>
-                    </div>
+                <div class="card-body p-0">
+                    <table class="table table-bordered mb-0 text-center"
+                           style="font-size:.9rem; table-layout:fixed; width:100%;">
+                        <colgroup>
+                            <col style="width:25%">
+                            <col style="width:25%">
+                            <col style="width:25%">
+                            <col style="width:25%">
+                        </colgroup>
+                        <thead class="table-light">
+                            <tr>
+                                <th>카페어울림</th>
+                                <th>잼잼카페</th>
+                                <th>꿈나래마켓</th>
+                                <th class="table-secondary">합계</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    {% if eoulrim_report %}
+                                        {{ eoulrim_report.daily_net_sales|default:0 }}원
+                                        <div class="form-text small">자동(보고서)</div>
+                                    {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="manual_eoulrim_sales" inputmode="numeric"
+                                                   class="form-control form-control-sm text-end manual-sale"
+                                                   value="{{ ops.manual_eoulrim_sales|default:0 }}">
+                                            <span class="input-group-text">원</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if jamjam_report %}
+                                        {{ jamjam_report.daily_net_sales|default:0 }}원
+                                        <div class="form-text small">자동(보고서)</div>
+                                    {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="manual_jamjam_sales" inputmode="numeric"
+                                                   class="form-control form-control-sm text-end manual-sale"
+                                                   value="{{ ops.manual_jamjam_sales|default:0 }}">
+                                            <span class="input-group-text">원</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if kumnare_report %}
+                                        {{ kumnare_report.sales_amount|default:0 }}원
+                                        <div class="form-text small">자동(보고서)</div>
+                                    {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="manual_kumnare_sales" inputmode="numeric"
+                                                   class="form-control form-control-sm text-end manual-sale"
+                                                   value="{{ ops.manual_kumnare_sales|default:0 }}">
+                                            <span class="input-group-text">원</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-bold table-secondary text-nowrap" id="sales-total"
+                                    style="overflow:hidden; text-overflow:ellipsis;">{{ total_sales|default:0 }}원</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
+            <script>
+            (function(){
+                const auto = {
+                    eoulrim: {% if eoulrim_report %}{{ eoulrim_report.daily_net_sales|default:0 }}{% else %}null{% endif %},
+                    jamjam : {% if jamjam_report  %}{{ jamjam_report.daily_net_sales|default:0  }}{% else %}null{% endif %},
+                    kumnare: {% if kumnare_report %}{{ kumnare_report.sales_amount|default:0    }}{% else %}null{% endif %},
+                };
+                const totalEl = document.getElementById('sales-total');
 
-            <!-- 행사 -->
-            <div class="card shadow-sm mb-3">
-                <div class="card-header fw-semibold bg-light">
-                    <i class="bi bi-calendar-event"></i> 행사
-                </div>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <label class="form-label small fw-medium">내부행사 / 프로그램</label>
-                        <textarea name="internal_event" class="form-control form-control-sm" rows="2"
-                                  placeholder="내용 입력">{{ ops.internal_event|default:'' }}</textarea>
-                    </div>
-                    <div class="mb-0">
-                        <label class="form-label small fw-medium">외부행사</label>
-                        <textarea name="external_event" class="form-control form-control-sm" rows="2"
-                                  placeholder="내용 입력">{{ ops.external_event|default:'' }}</textarea>
-                    </div>
-                </div>
-            </div>
+                function rawNum(input){
+                    const digits = (input.value || '').replace(/[^\d]/g, '');
+                    return digits ? parseInt(digits, 10) : 0;
+                }
+                function formatInput(input){
+                    const n = rawNum(input);
+                    input.value = n ? n.toLocaleString() : '';
+                }
+                function recalc(){
+                    const e = auto.eoulrim ?? rawNum(document.querySelector('[name=manual_eoulrim_sales]') || {value:'0'});
+                    const j = auto.jamjam  ?? rawNum(document.querySelector('[name=manual_jamjam_sales]')  || {value:'0'});
+                    const k = auto.kumnare ?? rawNum(document.querySelector('[name=manual_kumnare_sales]') || {value:'0'});
+                    totalEl.textContent = (e + j + k).toLocaleString() + '원';
+                }
 
-            <!-- 특이사항 -->
-            <div class="card shadow-sm mb-3">
+                document.querySelectorAll('.manual-sale').forEach(el => {
+                    formatInput(el);
+                    el.addEventListener('input', () => {
+                        const caret  = el.selectionStart || 0;
+                        const digitsBeforeCaret = el.value.slice(0, caret).replace(/[^\d]/g, '').length;
+                        formatInput(el);
+                        let count = 0, newPos = el.value.length;
+                        for (let i = 0; i < el.value.length; i++) {
+                            if (/\d/.test(el.value[i])) count++;
+                            if (count === digitsBeforeCaret) { newPos = i + 1; break; }
+                        }
+                        el.setSelectionRange(newPos, newPos);
+                        recalc();
+                    });
+                });
+                recalc();
+            })();
+            </script>
+
+        </div>
+        <div class="col-lg-6">
+
+            <!-- 세부 이용현황 (셔틀버스 · 대여물품 · 스탬프투어) -->
+            <div class="card shadow-sm">
                 <div class="card-header fw-semibold bg-light">
-                    <i class="bi bi-exclamation-circle"></i> 특이사항
+                    <i class="bi bi-bus-front"></i> 세부 이용현황
+                    <span class="small text-muted fw-normal">— 해당 부서 보고서가 없으면 수기 입력</span>
                 </div>
-                <div class="card-body">
-                    <textarea name="special_notes" class="form-control form-control-sm" rows="3"
-                              placeholder="특이사항 입력">{{ ops.special_notes|default:'' }}</textarea>
+                <div class="card-body p-0">
+                    <table class="table table-bordered mb-0 text-center"
+                           style="font-size:.9rem; table-layout:fixed; width:100%;">
+                        <colgroup>
+                            <col style="width:33.33%">
+                            <col style="width:33.33%">
+                            <col style="width:33.33%">
+                        </colgroup>
+                        <thead class="table-light">
+                            <tr>
+                                <th>셔틀버스</th>
+                                <th>꿈나래마켓 대여물품</th>
+                                <th>스탬프 투어</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    {% if info_report %}
+                                        {{ info_report.shuttle_total|default:0 }}명
+                                        <div class="form-text small">자동(보고서)</div>
+                                    {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="manual_shuttle_total" inputmode="numeric"
+                                                   class="form-control form-control-sm text-end manual-count"
+                                                   value="{{ ops.manual_shuttle_total|default:0 }}">
+                                            <span class="input-group-text">명</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if kumnare_report %}
+                                        {{ kumnare_report.rental_total_users|default:0 }}명
+                                        <div class="form-text small">자동(보고서)</div>
+                                    {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="manual_rental_total" inputmode="numeric"
+                                                   class="form-control form-control-sm text-end manual-count"
+                                                   value="{{ ops.manual_rental_total|default:0 }}">
+                                            <span class="input-group-text">명</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if kumnare_report %}
+                                        {{ kumnare_report.stamp_issued|default:0 }}명
+                                        <div class="form-text small">자동(보고서)</div>
+                                    {% else %}
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="manual_stamp_total" inputmode="numeric"
+                                                   class="form-control form-control-sm text-end manual-count"
+                                                   value="{{ ops.manual_stamp_total|default:0 }}">
+                                            <span class="input-group-text">명</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
+            <script>
+            // 세부 이용현황 input — 콤마 자동 포맷
+            (function(){
+                function rawNum(input){
+                    const d = (input.value || '').replace(/[^\d]/g, '');
+                    return d ? parseInt(d, 10) : 0;
+                }
+                function formatInput(input){
+                    const n = rawNum(input);
+                    input.value = n ? n.toLocaleString() : '';
+                }
+                document.querySelectorAll('.manual-count').forEach(el => {
+                    formatInput(el);
+                    el.addEventListener('input', () => {
+                        const caret = el.selectionStart || 0;
+                        const digitsBeforeCaret = el.value.slice(0, caret).replace(/[^\d]/g, '').length;
+                        formatInput(el);
+                        let count = 0, newPos = el.value.length;
+                        for (let i = 0; i < el.value.length; i++) {
+                            if (/\d/.test(el.value[i])) count++;
+                            if (count === digitsBeforeCaret) { newPos = i + 1; break; }
+                        }
+                        el.setSelectionRange(newPos, newPos);
+                    });
+                });
+            })();
+            </script>
 
         </div>
     </div>
 
-    <!-- 편익시설 매출 -->
+    <!-- 호환용 hidden (사용 안 함) -->
+    <input type="hidden" name="internal_event" value="">
+    <input type="hidden" name="external_event" value="">
+
+    <!-- 작업사진 공용 헬퍼 -->
+    <script>
+    function toggleDeletePhoto(btn, id){
+        const item = btn.closest('.work-photo-item');
+        const form = btn.closest('form');
+        const existingInput = form.querySelector(`input[name="delete_work_photo_ids"][value="${id}"]`);
+        if (existingInput) {
+            existingInput.remove();
+            item.classList.remove('marked-delete');
+            btn.textContent = '×';
+        } else {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'delete_work_photo_ids';
+            inp.value = id;
+            form.appendChild(inp);
+            item.classList.add('marked-delete');
+            btn.textContent = '↻';
+        }
+    }
+    </script>
+    <style>
+    .work-photo-item .photo-x-btn {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        width: 18px;
+        height: 18px;
+        line-height: 16px;
+        text-align: center;
+        background: rgba(0,0,0,.55);
+        color: #fff;
+        border: none;
+        border-radius: 50%;
+        font-size: .85rem;
+        cursor: pointer;
+        padding: 0;
+        transition: background .15s;
+    }
+    .work-photo-item .photo-x-btn:hover { background: rgba(220,53,69,.95); }
+    .work-photo-item.marked-delete img { opacity: .35; outline: 2px solid #dc3545; }
+    </style>
+
+    <style>
+    .col-header-input { padding-right: 26px !important; }
+    .col-header-x {
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        line-height: 16px;
+        text-align: center;
+        background: rgba(0,0,0,.12);
+        color: #555;
+        border: none;
+        border-radius: 50%;
+        font-size: .85rem;
+        cursor: pointer;
+        padding: 0;
+        transition: background .15s, color .15s;
+    }
+    .col-header-x:hover { background: #dc3545; color: #fff; }
+    </style>
+
+    <!-- 행사 (풀폭 — 내부/외부 2분할) -->
     <div class="card shadow-sm mb-3">
         <div class="card-header fw-semibold bg-light">
-            <i class="bi bi-shop"></i> 편익시설 매출
+            <i class="bi bi-calendar-event"></i> 행사
         </div>
-        <div class="card-body p-0">
-            <table class="table table-bordered mb-0 text-center" style="font-size:.9rem">
-                <thead class="table-light">
-                    <tr>
-                        <th>카페어울림</th>
-                        <th>잼잼카페</th>
-                        <th>꿈나래마켓</th>
-                        <th class="table-secondary">합계</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>{% if eoulrim_report %}{{ eoulrim_report.daily_net_sales|default:0 }}원{% else %}<span class="text-muted">-</span>{% endif %}</td>
-                        <td>{% if jamjam_report %}{{ jamjam_report.daily_net_sales|default:0 }}원{% else %}<span class="text-muted">-</span>{% endif %}</td>
-                        <td>{% if kumnare_report %}{{ kumnare_report.sales_amount|default:0 }}원{% else %}<span class="text-muted">-</span>{% endif %}</td>
-                        <td class="fw-bold table-secondary">{{ total_sales|default:0 }}원</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <label class="form-label small fw-medium d-flex justify-content-between align-items-center">
+                        <span>내부행사 / 프로그램</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                onclick="EVENT_CTRL.internal.add()">
+                            <i class="bi bi-plus-circle"></i> 행사 추가
+                        </button>
+                    </label>
+                    <div id="internal-events-list" class="d-flex flex-column gap-2"></div>
+                    <div class="form-text small">행사명 + 자유 컬럼(예: 운영시간/운영장소/참여학교/참여인원).</div>
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label small fw-medium d-flex justify-content-between align-items-center">
+                        <span>외부행사</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                onclick="EVENT_CTRL.external.add()">
+                            <i class="bi bi-plus-circle"></i> 행사 추가
+                        </button>
+                    </label>
+                    <div id="external-events-list" class="d-flex flex-column gap-2"></div>
+                    <div class="form-text small">외부행사도 같은 형식.</div>
+                </div>
+            </div>
+
+            {{ internal_events|json_script:"internal-events-initial" }}
+            {{ external_events|json_script:"external-events-initial" }}
+            <script>
+            (function(){
+                function escapeHtml(s){
+                    return String(s||'').replace(/[&<>"']/g, c => ({
+                        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+                    }[c]));
+                }
+                function makeCtrl(kind, listId, initId, hiddenId){
+                    const listEl  = document.getElementById(listId);
+                    const hidden  = document.getElementById(hiddenId);
+                    const initRaw = document.getElementById(initId)?.textContent || '[]';
+                    let events = [];
+                    try {
+                        const parsed = JSON.parse(initRaw);
+                        events = Array.isArray(parsed) ? parsed.map(ev => ({
+                            name: ev.name || '', columns: ev.columns || [],
+                        })) : [];
+                    } catch(e) { events = []; }
+
+                    function sync(){ hidden.value = JSON.stringify(events); }
+                    function render(){
+                        listEl.innerHTML = '';
+                        events.forEach((ev, i) => {
+                            const cols = ev.columns || [];
+                            let headerCells = '';
+                            let valueCells  = '';
+                            cols.forEach((c, j) => {
+                                headerCells += `
+                                    <th class="p-1 align-middle" style="min-width:120px; background:#f1f3f5;">
+                                        <div class="position-relative">
+                                            <input type="text" class="form-control form-control-sm col-header-input"
+                                                   placeholder="헤더"
+                                                   value="${escapeHtml(c.header || '')}"
+                                                   oninput="EVENT_CTRL.${kind}.updateCol(${i}, ${j}, 'header', this.value)">
+                                            <button type="button" class="col-header-x"
+                                                    title="컬럼 삭제"
+                                                    onclick="EVENT_CTRL.${kind}.removeCol(${i}, ${j})">×</button>
+                                        </div>
+                                    </th>`;
+                                valueCells += `
+                                    <td class="p-1 align-middle">
+                                        <input type="text" class="form-control form-control-sm"
+                                               placeholder="값"
+                                               value="${escapeHtml(c.value || '')}"
+                                               oninput="EVENT_CTRL.${kind}.updateCol(${i}, ${j}, 'value', this.value)">
+                                    </td>`;
+                            });
+                            const tableHtml = cols.length ? `
+                                <div class="table-responsive">
+                                    <table class="table table-bordered mb-2" style="font-size:.85rem;">
+                                        <thead><tr>${headerCells}</tr></thead>
+                                        <tbody><tr>${valueCells}</tr></tbody>
+                                    </table>
+                                </div>` : `
+                                <div class="form-text small mb-2 text-muted">컬럼이 없습니다. "컬럼 추가"로 시작하세요.</div>`;
+
+                            const card = document.createElement('div');
+                            card.className = 'border rounded p-2 bg-white';
+                            card.innerHTML = `
+                                <div class="d-flex gap-2 mb-2">
+                                    <input type="text" class="form-control form-control-sm flex-grow-1"
+                                           placeholder="행사명"
+                                           value="${escapeHtml(ev.name)}"
+                                           oninput="EVENT_CTRL.${kind}.updateName(${i}, this.value)">
+                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                            title="행사 삭제"
+                                            onclick="EVENT_CTRL.${kind}.remove(${i})">✕</button>
+                                </div>
+                                ${tableHtml}
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        onclick="EVENT_CTRL.${kind}.addCol(${i})">
+                                    <i class="bi bi-plus"></i> 컬럼 추가
+                                </button>`;
+                            listEl.appendChild(card);
+                        });
+                        sync();
+                    }
+                    return {
+                        add:        () => { events.push({name:'', columns:[]}); render(); },
+                        remove:     i => { events.splice(i, 1); render(); },
+                        updateName: (i, v) => { events[i].name = v; sync(); },
+                        addCol:     i => { events[i].columns.push({header:'', value:''}); render(); },
+                        removeCol:  (i, j) => { events[i].columns.splice(j, 1); render(); },
+                        updateCol:  (i, j, k, v) => { events[i].columns[j][k] = v; sync(); },
+                        _render:    render,
+                    };
+                }
+                window.EVENT_CTRL = {
+                    internal: makeCtrl('internal', 'internal-events-list',
+                                       'internal-events-initial', 'id_internal_events_json'),
+                    external: makeCtrl('external', 'external-events-list',
+                                       'external-events-initial', 'id_external_events_json'),
+                };
+                EVENT_CTRL.internal._render();
+                EVENT_CTRL.external._render();
+            })();
+            </script>
+        </div>
+    </div>
+
+    <!-- 특이사항 (풀폭) -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header fw-semibold bg-light">
+            <i class="bi bi-exclamation-circle"></i> 특이사항
+        </div>
+        <div class="card-body">
+            <textarea name="special_notes" class="form-control form-control-sm" rows="3"
+                      placeholder="특이사항 입력">{{ ops.special_notes|default:'' }}</textarea>
         </div>
     </div>
 

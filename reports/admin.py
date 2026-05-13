@@ -1,8 +1,10 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import (
     DailyReport, TaskItem,
     DailyTask, SubTask,
     OperationsDailyData,
+    InternalEvent, ExternalEvent, FacilityWorkPhoto,
 )
 
 
@@ -36,6 +38,31 @@ class DailyTaskAdmin(admin.ModelAdmin):
     ordering = ('-start_date',)
 
 
+class InternalEventInline(admin.TabularInline):
+    model = InternalEvent
+    extra = 0
+    fields = ('name', 'columns_json', 'order')
+
+
+class ExternalEventInline(admin.TabularInline):
+    model = ExternalEvent
+    extra = 0
+    fields = ('name', 'columns_json', 'order')
+
+
+class FacilityWorkPhotoInline(admin.TabularInline):
+    model = FacilityWorkPhoto
+    extra = 0
+    fields = ('category', 'image', 'preview', 'order')
+    readonly_fields = ('preview',)
+
+    def preview(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" style="max-height:80px;" />', obj.image.url)
+        return '-'
+    preview.short_description = '미리보기'
+
+
 @admin.register(OperationsDailyData)
 class OperationsDailyDataAdmin(admin.ModelAdmin):
     list_display = ('report_date', 'today_total', 'godata_total', 'main_gate_walk', 'sub_gate_walk', 'car_visit', 'updated_at')
@@ -43,6 +70,7 @@ class OperationsDailyDataAdmin(admin.ModelAdmin):
     search_fields = ('report_date', 'special_notes', 'internal_event', 'external_event')
     date_hierarchy = 'report_date'
     ordering = ('-report_date',)
+    inlines = (InternalEventInline, ExternalEventInline, FacilityWorkPhotoInline)
     fieldsets = (
         ('날짜', {'fields': ('report_date',)}),
         ('방문현황', {
@@ -69,7 +97,11 @@ class OperationsDailyDataAdmin(admin.ModelAdmin):
             'fields': ('tomorrow_temp_min', 'tomorrow_temp_max', 'tomorrow_rain_pct'),
         }),
         ('운영관리 점검', {
-            'fields': ('facility_interior', 'facility_outdoor', 'facility_fountain'),
+            'fields': (
+                'facility_interior', 'facility_interior_caption',
+                'facility_outdoor',  'facility_outdoor_caption',
+                'facility_fountain', 'facility_fountain_caption',
+            ),
         }),
         ('주차장', {
             'fields': ('parking_family', 'parking_disabled', 'parking_pregnant', 'parking_children'),
@@ -77,9 +109,47 @@ class OperationsDailyDataAdmin(admin.ModelAdmin):
         ('행사·특이사항', {
             'fields': ('internal_event', 'external_event', 'special_notes'),
         }),
+        ('편익시설 매출 (수기)', {
+            'classes': ('collapse',),
+            'fields': ('manual_eoulrim_sales', 'manual_jamjam_sales', 'manual_kumnare_sales'),
+        }),
+        ('세부 이용현황 (수기)', {
+            'classes': ('collapse',),
+            'fields': ('manual_shuttle_total', 'manual_rental_total', 'manual_stamp_total'),
+        }),
         ('메타', {
             'classes': ('collapse',),
             'fields': ('created_by', 'created_at', 'updated_at'),
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(InternalEvent)
+class InternalEventAdmin(admin.ModelAdmin):
+    list_display = ('ops', 'name', 'order', 'created_at')
+    list_filter = ('ops__report_date',)
+    search_fields = ('name',)
+    ordering = ('-ops__report_date', 'order')
+
+
+@admin.register(ExternalEvent)
+class ExternalEventAdmin(admin.ModelAdmin):
+    list_display = ('ops', 'name', 'order', 'created_at')
+    list_filter = ('ops__report_date',)
+    search_fields = ('name',)
+    ordering = ('-ops__report_date', 'order')
+
+
+@admin.register(FacilityWorkPhoto)
+class FacilityWorkPhotoAdmin(admin.ModelAdmin):
+    list_display = ('ops', 'category', 'preview', 'order', 'created_at')
+    list_filter = ('category', 'ops__report_date')
+    ordering = ('-ops__report_date', 'category', 'order')
+    readonly_fields = ('preview',)
+
+    def preview(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" style="max-height:80px;" />', obj.image.url)
+        return '-'
+    preview.short_description = '미리보기'

@@ -826,7 +826,28 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         ctx['eoulrim_report']    = integrated['eoulrim_report']
         ctx['jamjam_report']     = integrated['jamjam_report']
         ctx['kumnare_report']    = integrated['kumnare_report']
+        ctx['info_report']       = integrated['info_report']
         ctx['total_sales']       = integrated['total_sales']
+        # 행사 + 작업사진 (카테고리별 분리)
+        if ops:
+            ctx['internal_events'] = [
+                {'name': ev.name, 'columns': ev.columns_json or []}
+                for ev in ops.internal_events.all().order_by('order')
+            ]
+            ctx['external_events'] = [
+                {'name': ev.name, 'columns': ev.columns_json or []}
+                for ev in ops.external_events.all().order_by('order')
+            ]
+            all_photos = list(ops.work_photos.all().order_by('order'))
+            ctx['work_photos_interior'] = [p for p in all_photos if p.category == 'interior']
+            ctx['work_photos_outdoor']  = [p for p in all_photos if p.category == 'outdoor']
+            ctx['work_photos_fountain'] = [p for p in all_photos if p.category == 'fountain']
+        else:
+            ctx['internal_events']      = []
+            ctx['external_events']      = []
+            ctx['work_photos_interior'] = []
+            ctx['work_photos_outdoor']  = []
+            ctx['work_photos_fountain'] = []
         return ctx
 
     def post(self, request):
@@ -837,8 +858,11 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         )
 
         def _int(key, default=0):
+            raw = request.POST.get(key, default)
+            if isinstance(raw, str):
+                raw = raw.replace(',', '').strip()
             try:
-                return int(request.POST.get(key, default))
+                return int(raw)
             except (ValueError, TypeError):
                 return default
 
@@ -861,7 +885,56 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         ops.internal_event    = request.POST.get('internal_event', '').strip()
         ops.external_event    = request.POST.get('external_event', '').strip()
         ops.special_notes     = request.POST.get('special_notes', '').strip()
+        ops.facility_interior_caption = request.POST.get('facility_interior_caption', '').strip()
+        ops.facility_outdoor_caption  = request.POST.get('facility_outdoor_caption',  '').strip()
+        ops.facility_fountain_caption = request.POST.get('facility_fountain_caption', '').strip()
+        # 편익시설 매출 수기 입력 (해당 시설 보고서 없는 경우만 의미 있음)
+        ops.manual_eoulrim_sales = _int('manual_eoulrim_sales')
+        ops.manual_jamjam_sales  = _int('manual_jamjam_sales')
+        ops.manual_kumnare_sales = _int('manual_kumnare_sales')
+        # 세부 이용현황 수기 입력 (info/kumnare 보고서 없을 때)
+        ops.manual_shuttle_total = _int('manual_shuttle_total')
+        ops.manual_rental_total  = _int('manual_rental_total')
+        ops.manual_stamp_total   = _int('manual_stamp_total')
         ops.save()
+
+        # ── 내부/외부 행사: JSON 페이로드 받아서 전체 교체 ────────
+        import json
+        from .models import InternalEvent, ExternalEvent, FacilityWorkPhoto
+
+        def _replace_events(model, related_mgr, json_key):
+            raw = request.POST.get(json_key, '[]')
+            try:
+                items = json.loads(raw)
+            except (ValueError, TypeError):
+                items = []
+            related_mgr.all().delete()
+            for idx, ev in enumerate(items):
+                name = (ev.get('name') or '').strip()
+                cols = ev.get('columns') or []
+                if not name and not cols:
+                    continue
+                model.objects.create(
+                    ops=ops, name=name, columns_json=cols, order=idx,
+                )
+
+        _replace_events(InternalEvent, ops.internal_events, 'internal_events_json')
+        _replace_events(ExternalEvent, ops.external_events, 'external_events_json')
+
+        # ── 작업사진: 카테고리별 삭제 + 새로 업로드 ──────────────
+        delete_ids = request.POST.getlist('delete_work_photo_ids')
+        if delete_ids:
+            ops.work_photos.filter(id__in=delete_ids).delete()
+
+        for cat in ('interior', 'outdoor', 'fountain'):
+            files = request.FILES.getlist(f'work_photos_{cat}')
+            if not files:
+                continue
+            base_order = ops.work_photos.filter(category=cat).count()
+            for i, f in enumerate(files):
+                FacilityWorkPhoto.objects.create(
+                    ops=ops, category=cat, image=f, order=base_order + i,
+                )
 
         return redirect(f'/reports/integrated/?date={target_date}')
 
@@ -1186,9 +1259,13 @@ def _gather_integrated_data(target_date):
     info_shuttle_items = list(info_report.items.filter(section='shuttle').order_by('order')) if info_report else []
     info_patrol_items  = list(info_report.items.filter(section='patrol').order_by('order'))  if info_report else []
 
-    e_s = eoulrim_report.daily_net_sales if eoulrim_report else 0
-    j_s = jamjam_report.daily_net_sales  if jamjam_report  else 0
-    k_s = kumnare_report.sales_amount    if kumnare_report  else 0
+    # 시설 보고서가 없으면 OperationsDailyData의 수기 매출 사용
+    e_s = (eoulrim_report.daily_net_sales if eoulrim_report
+           else (ops_data.manual_eoulrim_sales if ops_data else 0))
+    j_s = (jamjam_report.daily_net_sales  if jamjam_report
+           else (ops_data.manual_jamjam_sales  if ops_data else 0))
+    k_s = (kumnare_report.sales_amount    if kumnare_report
+           else (ops_data.manual_kumnare_sales if ops_data else 0))
 
     return {
         'ops_data':            ops_data,
@@ -1202,6 +1279,9 @@ def _gather_integrated_data(target_date):
         'info_shuttle_items':  info_shuttle_items,
         'info_patrol_items':   info_patrol_items,
         'total_sales':         e_s + j_s + k_s,
+        'eoulrim_sales':       e_s,
+        'jamjam_sales':        j_s,
+        'kumnare_sales':       k_s,
     }
 
 

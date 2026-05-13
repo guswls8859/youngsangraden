@@ -197,6 +197,11 @@ class OperationsDailyData(models.Model):
     facility_outdoor  = models.TextField(blank=True, verbose_name='잔디마당·가로수길·전망언덕')
     facility_fountain = models.TextField(blank=True, verbose_name='분수정원·잼잼카페')
 
+    # 작업사진 캡션 (사진은 FacilityWorkPhoto에 category별로 저장)
+    facility_interior_caption = models.CharField(max_length=200, blank=True, verbose_name='내부시설 작업사진 캡션')
+    facility_outdoor_caption  = models.CharField(max_length=200, blank=True, verbose_name='잔디마당·가로수길·전망언덕 작업사진 캡션')
+    facility_fountain_caption = models.CharField(max_length=200, blank=True, verbose_name='분수정원·잼잼카페 작업사진 캡션')
+
     # 주차장 (대수)
     parking_family   = models.PositiveIntegerField(default=0, verbose_name='다둥이')
     parking_disabled = models.PositiveIntegerField(default=0, verbose_name='장애인')
@@ -209,6 +214,16 @@ class OperationsDailyData(models.Model):
 
     # 특이사항
     special_notes = models.TextField(blank=True, verbose_name='특이사항')
+
+    # 편익시설 매출 수기 입력 (facility 보고서 없을 때 사용)
+    manual_eoulrim_sales = models.PositiveIntegerField(default=0, verbose_name='카페어울림 수기매출')
+    manual_jamjam_sales  = models.PositiveIntegerField(default=0, verbose_name='잼잼카페 수기매출')
+    manual_kumnare_sales = models.PositiveIntegerField(default=0, verbose_name='꿈나래마켓 수기매출')
+
+    # 세부 이용현황 수기 입력 (각 부서 보고서 없을 때 사용)
+    manual_shuttle_total = models.PositiveIntegerField(default=0, verbose_name='셔틀버스 수기 인원')
+    manual_rental_total  = models.PositiveIntegerField(default=0, verbose_name='대여물품 수기 인원')
+    manual_stamp_total   = models.PositiveIntegerField(default=0, verbose_name='스탬프투어 수기 인원')
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
@@ -224,3 +239,72 @@ class OperationsDailyData(models.Model):
 
     def __str__(self):
         return f'운영데이터 {self.report_date}'
+
+
+class InternalEvent(models.Model):
+    """일일보고 내부행사/프로그램 항목 — 행사명 + 자유 컬럼 테이블"""
+    ops = models.ForeignKey(
+        OperationsDailyData, on_delete=models.CASCADE,
+        related_name='internal_events', verbose_name='일일보고'
+    )
+    name = models.CharField(max_length=200, verbose_name='행사명')
+    # 자유 컬럼: [{'header': '운영시간', 'value': '13:40~15:00'}, ...]
+    columns_json = models.JSONField(default=list, blank=True, verbose_name='컬럼')
+    order = models.PositiveIntegerField(default=0, verbose_name='순서')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '내부행사/프로그램'
+        verbose_name_plural = '내부행사/프로그램 목록'
+        ordering = ['order', 'created_at']
+
+    def __str__(self):
+        return f'[{self.ops.report_date}] {self.name}'
+
+
+class ExternalEvent(models.Model):
+    """일일보고 외부행사 항목 — 행사명 + 자유 컬럼 테이블"""
+    ops = models.ForeignKey(
+        OperationsDailyData, on_delete=models.CASCADE,
+        related_name='external_events', verbose_name='일일보고'
+    )
+    name = models.CharField(max_length=200, verbose_name='행사명')
+    columns_json = models.JSONField(default=list, blank=True, verbose_name='컬럼')
+    order = models.PositiveIntegerField(default=0, verbose_name='순서')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '외부행사'
+        verbose_name_plural = '외부행사 목록'
+        ordering = ['order', 'created_at']
+
+    def __str__(self):
+        return f'[{self.ops.report_date}] {self.name}'
+
+
+class FacilityWorkPhoto(models.Model):
+    """일일보고 운영관리 작업사진 (구역별)"""
+    CATEGORY_CHOICES = [
+        ('interior', '내부시설'),
+        ('outdoor',  '잔디마당·가로수길·전망언덕'),
+        ('fountain', '분수정원·잼잼카페'),
+    ]
+    ops = models.ForeignKey(
+        OperationsDailyData, on_delete=models.CASCADE,
+        related_name='work_photos', verbose_name='일일보고'
+    )
+    category = models.CharField(
+        max_length=10, choices=CATEGORY_CHOICES, default='interior',
+        verbose_name='구역',
+    )
+    image = models.ImageField(upload_to='work_photos/%Y/%m/', verbose_name='사진')
+    order = models.PositiveIntegerField(default=0, verbose_name='순서')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = '운영관리 작업사진'
+        verbose_name_plural = '운영관리 작업사진 목록'
+        ordering = ['category', 'order', 'created_at']
+
+    def __str__(self):
+        return f'[{self.ops.report_date}] {self.get_category_display()} #{self.order}'
