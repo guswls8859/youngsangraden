@@ -8,6 +8,11 @@ from django.views.generic import RedirectView
 from django.http import HttpResponse
 
 
+admin.site.site_header = '용산어린이정원 운영관리 시스템'
+admin.site.site_title  = '용산어린이정원 관리자'
+admin.site.index_title = '관리 메뉴'
+
+
 def health_check(request):
     return HttpResponse('ok')
 
