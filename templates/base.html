@@ -38,6 +38,9 @@
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                         <i class="bi bi-speedometer2"></i> 관리자
+                        {% if pending_vacation_count %}
+                        <span class="badge bg-warning text-dark ms-1">{{ pending_vacation_count }}</span>
+                        {% endif %}
                     </a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="{% url 'reports:task_report' %}">
@@ -45,6 +48,16 @@
                         </a></li>
                         <li><a class="dropdown-item" href="{% url 'reports:task_weekly_report' %}">
                             <i class="bi bi-calendar-week"></i> 주간 업무 보고
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'reports:vacation_admin_list' %}">
+                            <i class="bi bi-airplane text-success"></i> 휴가 승인
+                            {% if pending_vacation_count %}
+                            <span class="badge bg-warning text-dark ms-1">{{ pending_vacation_count }}</span>
+                            {% endif %}
+                        </a></li>
+                        <li><a class="dropdown-item" href="{% url 'reports:duty_admin_list' %}">
+                            <i class="bi bi-moon-stars-fill" style="color:#3949ab"></i> 당직 관리
                         </a></li>
                         {% if user.username == 'admin' %}
                         <li><hr class="dropdown-divider"></li>

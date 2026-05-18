@@ -5,12 +5,12 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from .models import DailyReport, TaskItem, DailyTask, SubTask, OperationsDailyData
+from .models import DailyReport, TaskItem, DailyTask, SubTask, OperationsDailyData, VacationRequest, DutyShift
 from .forms import DailyReportForm, DailyTaskForm
 from .pdf import build_report_pdf, build_daily_pdf, build_weekly_pdf, build_daily_task_pdf, build_weekly_task_pdf
 
@@ -547,6 +547,51 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
                 d: list(v.values()) for d, v in team_map.items()
             })
 
+        # ── 휴가/당직 배지 데이터 ─────────────────────────────
+        # 휴가: personal은 본인 것만, team은 운영사무국 전체 — 승인된 건만 표시
+        vacation_qs = VacationRequest.objects.filter(
+            status='approved',
+            start_date__lte=month_end,
+            end_date__gte=month_start,
+            user__organization='operations',
+        ).select_related('user')
+        if mode == 'personal':
+            vacation_qs = vacation_qs.filter(user=self.request.user)
+
+        day_vacations: dict = {}
+        for v in vacation_qs:
+            label = v.get_leave_type_display()
+            if v.half_period:
+                label = f'{label}({v.get_half_period_display()})'
+            cur = max(v.start_date, month_start)
+            end = min(v.end_date, month_end)
+            while cur <= end:
+                day_vacations.setdefault(cur.day, []).append({
+                    'name': v.user.get_full_name() or v.user.username,
+                    'emoji': v.user.emoji,
+                    'type': label,
+                })
+                cur += datetime.timedelta(days=1)
+
+        # 당직: personal/team 모두 표시 (운영사무국 전체)
+        duty_qs = DutyShift.objects.filter(
+            date__range=(month_start, month_end),
+            user__organization='operations',
+        ).select_related('user')
+        if mode == 'personal':
+            duty_qs = duty_qs.filter(user=self.request.user)
+
+        day_duties: dict = {}
+        for d in duty_qs:
+            day_duties.setdefault(d.date.day, []).append({
+                'name': d.user.get_full_name() or d.user.username,
+                'emoji': d.user.emoji,
+                'note': d.note,
+            })
+
+        day_vacations_json = json.dumps(day_vacations)
+        day_duties_json    = json.dumps(day_duties)
+
         emoji_list = [
             '☃️',
             # 동물
@@ -574,6 +619,8 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
             'next_year': next_year, 'next_month': next_month,
             'cal': cal, 'today': today,
             'day_dots_json': day_dots_json,
+            'day_vacations_json': day_vacations_json,
+            'day_duties_json': day_duties_json,
             'selected_date': self.request.GET.get('selected', ''),
             'mode': mode,
             'emoji_list': emoji_list,
@@ -641,7 +688,43 @@ def task_day_tasks(request, date_str):
         }
         (my_tasks if t.user_id == request.user.pk else team_tasks).append(item)
 
-    return JsonResponse({'my_tasks': my_tasks, 'team_tasks': team_tasks})
+    # 휴가/당직 — 해당 날짜 기준
+    vac_qs = VacationRequest.objects.filter(
+        status='approved',
+        start_date__lte=target_date,
+        end_date__gte=target_date,
+        user__organization='operations',
+    ).select_related('user')
+    if mode == 'personal':
+        vac_qs = vac_qs.filter(user=request.user)
+    vacations = [{
+        'name':  v.user.get_full_name() or v.user.username,
+        'emoji': v.user.emoji,
+        'type':  v.get_leave_type_display() + (
+            f'({v.get_half_period_display()})' if v.half_period else ''
+        ),
+        'is_mine': v.user_id == request.user.pk,
+    } for v in vac_qs]
+
+    duty_qs = DutyShift.objects.filter(
+        date=target_date,
+        user__organization='operations',
+    ).select_related('user')
+    if mode == 'personal':
+        duty_qs = duty_qs.filter(user=request.user)
+    duties = [{
+        'name':  d.user.get_full_name() or d.user.username,
+        'emoji': d.user.emoji,
+        'note':  d.note,
+        'is_mine': d.user_id == request.user.pk,
+    } for d in duty_qs]
+
+    return JsonResponse({
+        'my_tasks': my_tasks,
+        'team_tasks': team_tasks,
+        'vacations': vacations,
+        'duties': duties,
+    })
 
 
 class TaskManagerReportView(ManagerRequiredMixin, TemplateView):
@@ -1492,3 +1575,268 @@ class WeeklyDashboardView(ManagerRequiredMixin, TemplateView):
         ctx['next_week'] = next_week_start.strftime('%Y-W%W')
         ctx['current_week'] = week_start.strftime('%Y-W%W')
         return ctx
+
+
+# ── 휴가 신청 (개인업무) ──────────────────────────────────────
+_LEAVE_TYPES_NEED_HALF = ('half', 'quarter')
+
+
+@login_required
+def vacation_request_create(request):
+    """직원이 휴가를 신청한다. AJAX POST."""
+    if _require_operations(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'invalid_method'}, status=400)
+
+    leave_type  = request.POST.get('leave_type', '').strip()
+    start_str   = request.POST.get('start_date', '').strip()
+    end_str     = request.POST.get('end_date', '').strip()
+    half_period = request.POST.get('half_period', '').strip()
+    reason      = request.POST.get('reason', '').strip()
+
+    valid_types = dict(VacationRequest.LEAVE_TYPE_CHOICES)
+    if leave_type not in valid_types:
+        return JsonResponse({'ok': False, 'error': '휴가 종류를 선택해주세요.'}, status=400)
+    try:
+        start_date = datetime.date.fromisoformat(start_str)
+        end_date   = datetime.date.fromisoformat(end_str) if end_str else start_date
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': '시작/종료일을 확인해주세요.'}, status=400)
+    if end_date < start_date:
+        return JsonResponse({'ok': False, 'error': '종료일은 시작일보다 빠를 수 없습니다.'}, status=400)
+
+    if leave_type in _LEAVE_TYPES_NEED_HALF:
+        if half_period not in ('am', 'pm'):
+            return JsonResponse({'ok': False, 'error': '오전/오후를 선택해주세요.'}, status=400)
+        # 반차/반반차는 하루
+        end_date = start_date
+    else:
+        half_period = ''
+
+    vr = VacationRequest.objects.create(
+        user=request.user,
+        leave_type=leave_type,
+        start_date=start_date,
+        end_date=end_date,
+        half_period=half_period,
+        reason=reason,
+    )
+    return JsonResponse({'ok': True, 'pk': vr.pk})
+
+
+@login_required
+def vacation_my_list(request):
+    """내 휴가 신청 내역 — 본인이 신청한 휴가들."""
+    if _require_operations(request):
+        return redirect('main_menu')
+    requests_qs = (
+        VacationRequest.objects
+        .filter(user=request.user)
+        .select_related('reviewed_by')
+        .order_by('-start_date', '-created_at')
+    )
+    return render(request, 'reports/vacation_my_list.html', {
+        'vacation_requests': requests_qs,
+        'leave_type_choices': VacationRequest.LEAVE_TYPE_CHOICES,
+    })
+
+
+@login_required
+def vacation_request_cancel(request, pk):
+    """대기 상태 신청만 본인이 취소(삭제) 가능."""
+    if _require_operations(request):
+        return redirect('main_menu')
+    vr = get_object_or_404(VacationRequest, pk=pk, user=request.user)
+    if vr.status != 'pending':
+        messages.error(request, '이미 처리된 신청은 취소할 수 없습니다.')
+    else:
+        vr.delete()
+        messages.success(request, '휴가 신청을 취소했습니다.')
+    return redirect('reports:vacation_my_list')
+
+
+# ── 관리자 휴가 승인 ─────────────────────────────────────────
+def _require_manager(request):
+    """관리자(role=manager, 운영사무국)가 아니면 True."""
+    return (
+        request.user.organization != 'operations'
+        or request.user.role != 'manager'
+    )
+
+
+@login_required
+def vacation_admin_list(request):
+    """관리자: 휴가 신청 목록. 기본은 대기 건만, ?status=all|approved|rejected 로 필터."""
+    if _require_manager(request):
+        return redirect('main_menu')
+
+    status_filter = request.GET.get('status', 'pending')
+    valid_statuses = {'pending', 'approved', 'rejected', 'all'}
+    if status_filter not in valid_statuses:
+        status_filter = 'pending'
+
+    qs = (
+        VacationRequest.objects
+        .select_related('user', 'reviewed_by')
+        .order_by('status', '-start_date', '-created_at')
+    )
+    if status_filter != 'all':
+        qs = qs.filter(status=status_filter)
+
+    pending_count = VacationRequest.objects.filter(status='pending').count()
+
+    return render(request, 'reports/vacation_admin_list.html', {
+        'vacation_requests': qs,
+        'status_filter': status_filter,
+        'pending_count': pending_count,
+    })
+
+
+@login_required
+def vacation_approve(request, pk):
+    """관리자: 휴가 신청 승인."""
+    if _require_manager(request):
+        return redirect('main_menu')
+    if request.method != 'POST':
+        return redirect('reports:vacation_admin_list')
+    vr = get_object_or_404(VacationRequest, pk=pk)
+    if vr.status != 'pending':
+        messages.error(request, '이미 처리된 신청입니다.')
+        return redirect('reports:vacation_admin_list')
+    vr.status = 'approved'
+    vr.reviewed_by = request.user
+    vr.reviewed_at = timezone.now()
+    vr.review_comment = request.POST.get('review_comment', '').strip()
+    vr.save()
+    messages.success(request, f'{vr.user.get_full_name() or vr.user.username}님의 휴가 신청을 승인했습니다.')
+    return redirect('reports:vacation_admin_list')
+
+
+@login_required
+def duty_admin_list(request):
+    """관리자: 당직 근무 월 캘린더 — 등록/삭제 화면."""
+    if _require_manager(request):
+        return redirect('main_menu')
+
+    today = timezone.localdate()
+    try:
+        year  = int(request.GET.get('year',  today.year))
+        month = int(request.GET.get('month', today.month))
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, TypeError):
+        year, month = today.year, today.month
+
+    prev_year, prev_month = (year - 1, 12) if month == 1  else (year, month - 1)
+    next_year, next_month = (year + 1, 1)  if month == 12 else (year, month + 1)
+
+    last_day    = _calendar.monthrange(year, month)[1]
+    month_start = datetime.date(year, month, 1)
+    month_end   = datetime.date(year, month, last_day)
+    cal = _calendar.Calendar(firstweekday=6).monthdayscalendar(year, month)
+
+    duties = (
+        DutyShift.objects
+        .filter(date__range=(month_start, month_end))
+        .select_related('user')
+        .order_by('date', 'user__last_name', 'user__username')
+    )
+
+    import json
+    day_duties = {}
+    for d in duties:
+        day_duties.setdefault(d.date.day, []).append({
+            'pk': d.pk,
+            'name': d.user.get_full_name() or d.user.username,
+            'emoji': d.user.emoji,
+            'note': d.note,
+        })
+
+    User = get_user_model()
+    staff = (
+        User.objects
+        .filter(is_active=True, organization='operations')
+        .order_by('last_name', 'first_name', 'username')
+    )
+
+    return render(request, 'reports/duty_admin_list.html', {
+        'year': year, 'month': month, 'today': today,
+        'prev_year': prev_year, 'prev_month': prev_month,
+        'next_year': next_year, 'next_month': next_month,
+        'cal': cal,
+        'day_duties_json': json.dumps(day_duties),
+        'staff_list': staff,
+    })
+
+
+@login_required
+def duty_create(request):
+    """관리자: 당직 등록 (AJAX POST)."""
+    if _require_manager(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'invalid_method'}, status=400)
+
+    user_id  = request.POST.get('user_id', '').strip()
+    date_str = request.POST.get('date', '').strip()
+    note     = request.POST.get('note', '').strip()
+
+    try:
+        date = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': '날짜를 확인해주세요.'}, status=400)
+
+    User = get_user_model()
+    try:
+        user = User.objects.get(pk=user_id, organization='operations', is_active=True)
+    except (User.DoesNotExist, ValueError):
+        return JsonResponse({'ok': False, 'error': '담당자를 선택해주세요.'}, status=400)
+
+    duty, created = DutyShift.objects.get_or_create(
+        user=user, date=date,
+        defaults={'note': note, 'created_by': request.user},
+    )
+    if not created:
+        return JsonResponse({'ok': False, 'error': '이미 같은 날짜에 등록된 당직입니다.'}, status=400)
+
+    return JsonResponse({
+        'ok': True,
+        'pk': duty.pk,
+        'name': user.get_full_name() or user.username,
+        'emoji': user.emoji,
+        'note': duty.note,
+        'date': duty.date.isoformat(),
+    })
+
+
+@login_required
+def duty_delete(request, pk):
+    """관리자: 당직 삭제 (AJAX POST)."""
+    if _require_manager(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'invalid_method'}, status=400)
+    duty = get_object_or_404(DutyShift, pk=pk)
+    duty.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def vacation_reject(request, pk):
+    """관리자: 휴가 신청 반려."""
+    if _require_manager(request):
+        return redirect('main_menu')
+    if request.method != 'POST':
+        return redirect('reports:vacation_admin_list')
+    vr = get_object_or_404(VacationRequest, pk=pk)
+    if vr.status != 'pending':
+        messages.error(request, '이미 처리된 신청입니다.')
+        return redirect('reports:vacation_admin_list')
+    vr.status = 'rejected'
+    vr.reviewed_by = request.user
+    vr.reviewed_at = timezone.now()
+    vr.review_comment = request.POST.get('review_comment', '').strip()
+    vr.save()
+    messages.success(request, f'{vr.user.get_full_name() or vr.user.username}님의 휴가 신청을 반려했습니다.')
+    return redirect('reports:vacation_admin_list')

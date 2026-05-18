@@ -24,6 +24,18 @@ urlpatterns = [
     path('tasks/report/pdf/', views.task_daily_pdf, name='task_daily_pdf'),
     path('tasks/report/weekly/', views.TaskWeeklyReportView.as_view(), name='task_weekly_report'),
     path('tasks/report/weekly/pdf/', views.task_weekly_pdf, name='task_weekly_pdf'),
+    # 휴가 신청 (개인업무)
+    path('vacation/request/', views.vacation_request_create, name='vacation_request_create'),
+    path('vacation/my/', views.vacation_my_list, name='vacation_my_list'),
+    path('vacation/<int:pk>/cancel/', views.vacation_request_cancel, name='vacation_request_cancel'),
+    # 휴가 승인 (관리자)
+    path('vacation/admin/', views.vacation_admin_list, name='vacation_admin_list'),
+    path('vacation/<int:pk>/approve/', views.vacation_approve, name='vacation_approve'),
+    path('vacation/<int:pk>/reject/', views.vacation_reject, name='vacation_reject'),
+    # 당직 관리 (관리자)
+    path('duty/admin/', views.duty_admin_list, name='duty_admin_list'),
+    path('duty/create/', views.duty_create, name='duty_create'),
+    path('duty/<int:pk>/delete/', views.duty_delete, name='duty_delete'),
     # 용산어린이정원 일일보고
     path('integrated/', views.IntegratedDailyReportView.as_view(), name='integrated_daily'),
     path('integrated/pdf/', views.integrated_daily_pdf, name='integrated_daily_pdf'),

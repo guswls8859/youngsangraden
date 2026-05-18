@@ -5,6 +5,7 @@ from .models import (
     DailyTask, SubTask,
     OperationsDailyData,
     InternalEvent, ExternalEvent, FacilityWorkPhoto,
+    VacationRequest, DutyShift,
 )
 
 
@@ -153,3 +154,35 @@ class FacilityWorkPhotoAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="max-height:80px;" />', obj.image.url)
         return '-'
     preview.short_description = '미리보기'
+
+
+@admin.register(VacationRequest)
+class VacationRequestAdmin(admin.ModelAdmin):
+    list_display = ('user', 'leave_type', 'start_date', 'end_date', 'half_period', 'status', 'reviewed_by', 'reviewed_at')
+    list_filter = ('status', 'leave_type', 'start_date')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'reason')
+    date_hierarchy = 'start_date'
+    autocomplete_fields = ('user', 'reviewed_by')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('신청 정보', {
+            'fields': ('user', 'leave_type', 'start_date', 'end_date', 'half_period', 'reason'),
+        }),
+        ('검토', {
+            'fields': ('status', 'reviewed_by', 'reviewed_at', 'review_comment'),
+        }),
+        ('메타', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+
+@admin.register(DutyShift)
+class DutyShiftAdmin(admin.ModelAdmin):
+    list_display = ('date', 'user', 'note', 'created_by', 'created_at')
+    list_filter = ('date',)
+    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'note')
+    date_hierarchy = 'date'
+    autocomplete_fields = ('user', 'created_by')
+    readonly_fields = ('created_at', 'updated_at')

@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% block title %}휴가 승인 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">
+        <i class="bi bi-shield-check text-primary"></i> 휴가 승인 관리
+        {% if pending_count > 0 %}
+        <span class="badge bg-warning text-dark ms-2">대기 {{ pending_count }}건</span>
+        {% endif %}
+    </h4>
+</div>
+
+<!-- 상태 필터 탭 -->
+<ul class="nav nav-pills mb-3 gap-1">
+    <li class="nav-item">
+        <a class="nav-link {% if status_filter == 'pending' %}active{% endif %}"
+           href="?status=pending">
+            <i class="bi bi-hourglass-split"></i> 대기
+            {% if pending_count > 0 %}<span class="badge bg-light text-dark ms-1">{{ pending_count }}</span>{% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if status_filter == 'approved' %}active{% endif %}"
+           href="?status=approved">
+            <i class="bi bi-check-circle"></i> 승인
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if status_filter == 'rejected' %}active{% endif %}"
+           href="?status=rejected">
+            <i class="bi bi-x-circle"></i> 반려
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if status_filter == 'all' %}active{% endif %}"
+           href="?status=all">전체</a>
+    </li>
+</ul>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        {% if vacation_requests %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width:130px">신청자</th>
+                        <th style="min-width:90px">휴가 종류</th>
+                        <th style="min-width:160px">기간</th>
+                        <th>사유</th>
+                        <th style="min-width:120px">신청일시</th>
+                        <th style="min-width:120px">상태</th>
+                        <th class="text-end" style="min-width:140px">처리</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for vr in vacation_requests %}
+                    <tr>
+                        <td class="fw-semibold">
+                            {{ vr.user.get_full_name|default:vr.user.username }}
+                            {% if vr.user.department %}
+                            <div class="small text-muted">{{ vr.user.department }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ vr.get_leave_type_display }}</span>
+                            {% if vr.half_period %}
+                            <span class="small text-muted">({{ vr.get_half_period_display }})</span>
+                            {% endif %}
+                        </td>
+                        <td class="small text-nowrap">
+                            {% if vr.start_date == vr.end_date %}
+                                {{ vr.start_date|date:"Y-m-d (D)" }}
+                            {% else %}
+                                {{ vr.start_date|date:"Y-m-d" }} ~<br>{{ vr.end_date|date:"Y-m-d" }}
+                            {% endif %}
+                        </td>
+                        <td class="small text-muted reason-cell">{{ vr.reason|default:"-" }}</td>
+                        <td class="small text-muted text-nowrap">{{ vr.created_at|date:"y-m-d H:i" }}</td>
+                        <td>
+                            {% if vr.status == 'pending' %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> 대기</span>
+                            {% elif vr.status == 'approved' %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> 승인</span>
+                            <div class="small text-muted mt-1">
+                                {{ vr.reviewed_by.get_full_name|default:vr.reviewed_by.username }}
+                                <br>{{ vr.reviewed_at|date:"y-m-d H:i" }}
+                            </div>
+                            {% if vr.review_comment %}
+                            <div class="small text-muted" style="font-size:.72rem">"{{ vr.review_comment }}"</div>
+                            {% endif %}
+                            {% else %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle"></i> 반려</span>
+                            <div class="small text-muted mt-1">
+                                {{ vr.reviewed_by.get_full_name|default:vr.reviewed_by.username }}
+                                <br>{{ vr.reviewed_at|date:"y-m-d H:i" }}
+                            </div>
+                            {% if vr.review_comment %}
+                            <div class="small text-muted" style="font-size:.72rem">"{{ vr.review_comment }}"</div>
+                            {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-nowrap">
+                            {% if vr.status == 'pending' %}
+                            <button type="button" class="btn btn-sm btn-success action-btn"
+                                    data-bs-toggle="modal" data-bs-target="#reviewModal"
+                                    data-action="approve" data-pk="{{ vr.pk }}"
+                                    data-user="{{ vr.user.get_full_name|default:vr.user.username }}"
+                                    data-leave="{{ vr.get_leave_type_display }}"
+                                    data-period="{% if vr.start_date == vr.end_date %}{{ vr.start_date|date:'Y-m-d' }}{% else %}{{ vr.start_date|date:'Y-m-d' }} ~ {{ vr.end_date|date:'Y-m-d' }}{% endif %}">
+                                <i class="bi bi-check-lg"></i> 승인
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger action-btn ms-1"
+                                    data-bs-toggle="modal" data-bs-target="#reviewModal"
+                                    data-action="reject" data-pk="{{ vr.pk }}"
+                                    data-user="{{ vr.user.get_full_name|default:vr.user.username }}"
+                                    data-leave="{{ vr.get_leave_type_display }}"
+                                    data-period="{% if vr.start_date == vr.end_date %}{{ vr.start_date|date:'Y-m-d' }}{% else %}{{ vr.start_date|date:'Y-m-d' }} ~ {{ vr.end_date|date:'Y-m-d' }}{% endif %}">
+                                <i class="bi bi-x-lg"></i> 반려
+                            </button>
+                            {% else %}
+                            <span class="text-muted small">처리완료</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-clipboard-check" style="font-size:2rem;opacity:.4"></i>
+            <p class="mt-2 mb-0">
+                {% if status_filter == 'pending' %}대기 중인 휴가 신청이 없습니다.
+                {% elif status_filter == 'approved' %}승인된 휴가 신청이 없습니다.
+                {% elif status_filter == 'rejected' %}반려된 휴가 신청이 없습니다.
+                {% else %}휴가 신청이 없습니다.{% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 승인/반려 모달 -->
+<div class="modal fade" id="reviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" id="reviewForm" action="">
+            {% csrf_token %}
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title fw-bold" id="reviewModalTitle">휴가 처리</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light py-2 small mb-3">
+                        <div><strong id="rvUser"></strong></div>
+                        <div class="text-muted">
+                            <span id="rvLeave"></span> · <span id="rvPeriod"></span>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-1">검토 메모 (선택)</label>
+                        <textarea name="review_comment" class="form-control form-control-sm" rows="3"
+                                  placeholder="신청자에게 전달할 메모"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">취소</button>
+                    <button type="submit" class="btn btn-sm" id="reviewSubmitBtn"></button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<style>
+/* 승인/반려 버튼: 가로 정렬 고정 */
+.action-btn {
+    white-space: nowrap;
+    min-width: 58px;
+    font-size: .8rem;
+}
+.action-btn i { font-size: .85rem; }
+/* 사유 셀: 길어도 줄바꿈 자연스럽게 */
+.reason-cell {
+    max-width: 280px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const APPROVE_BASE = "/reports/vacation/";
+const REJECT_BASE  = "/reports/vacation/";
+const reviewModalEl = document.getElementById('reviewModal');
+const reviewForm    = document.getElementById('reviewForm');
+const submitBtn     = document.getElementById('reviewSubmitBtn');
+
+reviewModalEl.addEventListener('show.bs.modal', e => {
+    const btn = e.relatedTarget;
+    const action = btn.dataset.action;
+    const pk = btn.dataset.pk;
+    document.getElementById('rvUser').textContent   = btn.dataset.user;
+    document.getElementById('rvLeave').textContent  = btn.dataset.leave;
+    document.getElementById('rvPeriod').textContent = btn.dataset.period;
+
+    if (action === 'approve') {
+        reviewForm.action = `${APPROVE_BASE}${pk}/approve/`;
+        document.getElementById('reviewModalTitle').textContent = '휴가 승인';
+        submitBtn.className = 'btn btn-sm btn-success';
+        submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> 승인';
+    } else {
+        reviewForm.action = `${REJECT_BASE}${pk}/reject/`;
+        document.getElementById('reviewModalTitle').textContent = '휴가 반려';
+        submitBtn.className = 'btn btn-sm btn-danger';
+        submitBtn.innerHTML = '<i class="bi bi-x-lg"></i> 반려';
+    }
+});
+</script>
+{% endblock %}

@@ -30,6 +30,14 @@
                 <button type="button" id="clearMyEmoji" class="btn btn-link btn-sm p-0 mt-2 text-muted" style="font-size:.75rem">이모지 지우기</button>
             </div>
         </div>
+        {% if mode == 'personal' %}
+        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#vacationRequestModal">
+            <i class="bi bi-airplane"></i> 휴가 신청
+        </button>
+        <a href="{% url 'reports:vacation_my_list' %}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-list-check"></i> 내 휴가 내역
+        </a>
+        {% endif %}
         <a href="{% url 'reports:integrated_daily' %}" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-file-earmark-text"></i> 용산어린이정원 일일보고
         </a>
@@ -82,6 +90,7 @@
                     <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}">
                         {{ day }}
                     </div>
+                    <div class="cal-specials" data-day="{{ day }}"></div>
                     <div class="cal-names" data-day="{{ day }}"></div>
                 </td>
                 {% endif %}
@@ -92,6 +101,72 @@
         </table>
     </div>
 </div>
+
+{% if mode == 'personal' %}
+<!-- 휴가 신청 모달 -->
+<div class="modal fade" id="vacationRequestModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-airplane text-success"></i> 휴가 신청
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="vrError" class="alert alert-danger py-2 d-none small"></div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold mb-1">휴가 종류 *</label>
+                    <select id="vr_leave_type" class="form-select form-select-sm">
+                        <option value="">-- 선택 --</option>
+                        <option value="annual">연차</option>
+                        <option value="half">반차</option>
+                        <option value="quarter">반반차</option>
+                        <option value="sick">병가</option>
+                        <option value="etc">기타</option>
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold mb-1">시작일 *</label>
+                        <input type="date" id="vr_start_date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6" id="vr_end_wrap">
+                        <label class="form-label small fw-semibold mb-1">종료일</label>
+                        <input type="date" id="vr_end_date" class="form-control form-control-sm">
+                    </div>
+                </div>
+                <div class="mb-2 d-none" id="vr_half_wrap">
+                    <label class="form-label small fw-semibold mb-1">시간대 *</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="vr_half" id="vr_half_am" value="am">
+                            <label class="form-check-label small" for="vr_half_am">오전</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="vr_half" id="vr_half_pm" value="pm">
+                            <label class="form-check-label small" for="vr_half_pm">오후</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold mb-1">사유 (선택)</label>
+                    <textarea id="vr_reason" class="form-control form-control-sm" rows="3" placeholder="휴가 사유를 입력해주세요"></textarea>
+                </div>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-info-circle"></i> 신청 후 관리자의 승인이 필요합니다.
+                </p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-sm btn-success" id="vrSubmitBtn">
+                    <i class="bi bi-check-lg"></i> 신청
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- 업무 목록 모달 -->
 <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
@@ -119,7 +194,7 @@
 /* ── 캘린더 테이블 ── */
 .task-cal { table-layout: fixed; }
 .task-cal td, .task-cal th { width: calc(100%/7); }
-.task-day { vertical-align: top; padding: 6px; height: 120px; cursor: pointer; transition: background .12s; }
+.task-day { vertical-align: top; padding: 6px; height: 140px; cursor: pointer; transition: background .12s; }
 .task-day:hover { background-color: #f0f4ff; }
 .today-cell { background-color: #fff9e6 !important; }
 .today-cell:hover { background-color: #fdf3c8 !important; }
@@ -143,6 +218,16 @@
     display: block; line-height: 1.4;
 }
 .cal-name-tag.partial { opacity: 0.55; }
+/* 휴가/당직 배지 */
+.cal-specials { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.cal-special-tag {
+    border-radius: 4px; font-size: 0.7rem; font-weight: 600;
+    padding: 1px 5px; line-height: 1.35;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: block;
+}
+.cal-vacation { background: #d1e7dd; color: #0a3622; border: 1px solid #a3cfbb; }
+.cal-duty     { background: #e8eaf6; color: #283593; border: 1px solid #c5cae9; }
 /* 개인 모드 업무명 태그 — 상태별 색 */
 .cal-task-doing { background: #cfe2ff; color: #084298; border-color: #9ec5fe; }
 .cal-task-hold  { background: #fff3cd; color: #664d03; border-color: #ffe69c; }
@@ -164,6 +249,15 @@
 .team-user-header { font-size: 0.78rem; font-weight: 700; color: #6c757d;
                     border-bottom: 1px solid #f0f0f0; padding-bottom: 3px; margin: 10px 0 6px; }
 .add-form-wrap { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-top: 8px; }
+/* 모달 휴가/당직 카드 */
+.specials-section { display: flex; flex-direction: column; gap: 4px; }
+.special-card {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 6px; font-size: 0.82rem;
+}
+.special-card.vacation-card { background: #d1e7dd; color: #0a3622; border: 1px solid #a3cfbb; }
+.special-card.duty-card     { background: #e8eaf6; color: #283593; border: 1px solid #c5cae9; }
+.special-icon { font-size: 1rem; }
 </style>
 
 {% endblock %}
@@ -172,6 +266,8 @@
 <script>
 const CSRF           = '{{ csrf_token }}';
 const DAY_DOTS       = {{ day_dots_json|safe }};
+const DAY_VACATIONS  = {{ day_vacations_json|safe }};
+const DAY_DUTIES     = {{ day_duties_json|safe }};
 const MODE           = '{{ mode }}';
 const IS_MANAGER     = {% if request.user.role == 'manager' %}true{% else %}false{% endif %};
 const CREATE_URL     = "{% url 'reports:task_create' %}";
@@ -211,6 +307,40 @@ function renderDots() {
                 el.appendChild(tag);
             });
         }
+    });
+
+    // 휴가/당직 배지 (mode 무관)
+    document.querySelectorAll('.cal-specials').forEach(el => {
+        const day = String(el.dataset.day);
+
+        const vacations = DAY_VACATIONS[day] || [];
+        vacations.forEach(v => {
+            const tag = document.createElement('span');
+            tag.className = 'cal-special-tag cal-vacation';
+            if (MODE === 'personal') {
+                tag.textContent = `🌴 ${v.type}`;
+                tag.title = `내 휴가 — ${v.type}`;
+            } else {
+                tag.textContent = `🌴 ${v.name} ${v.type}`;
+                tag.title = `${v.name} — ${v.type}`;
+            }
+            el.appendChild(tag);
+        });
+
+        const duties = DAY_DUTIES[day] || [];
+        duties.forEach(d => {
+            const tag = document.createElement('span');
+            tag.className = 'cal-special-tag cal-duty';
+            const noteSuffix = d.note ? ` (${d.note})` : '';
+            if (MODE === 'personal') {
+                tag.textContent = `🌙 당직${noteSuffix}`;
+                tag.title = `내 당직${noteSuffix}`;
+            } else {
+                tag.textContent = `🌙 ${d.name}${noteSuffix}`;
+                tag.title = `${d.name} 당직${noteSuffix}`;
+            }
+            el.appendChild(tag);
+        });
     });
 }
 
@@ -283,6 +413,31 @@ function renderPanel(data, dateStr) {
             <button class="btn btn-outline-secondary btn-sm" id="af_cancelBtn">취소</button>
         </div>
     </div>`;
+
+    // 휴가/당직 섹션 (있을 때만)
+    const vacations = data.vacations || [];
+    const duties    = data.duties    || [];
+    if (vacations.length || duties.length) {
+        html += `<div class="specials-section mb-2">`;
+        vacations.forEach(v => {
+            const emoji = v.emoji ? `${v.emoji} ` : '';
+            const who = isPersonal ? '내 휴가' : `${emoji}${escHtml(v.name)}`;
+            html += `<div class="special-card vacation-card">
+                <span class="special-icon">🌴</span>
+                <span class="special-text"><strong>${who}</strong> · ${escHtml(v.type)}</span>
+            </div>`;
+        });
+        duties.forEach(d => {
+            const emoji = d.emoji ? `${d.emoji} ` : '';
+            const who = isPersonal ? '내 당직' : `${emoji}${escHtml(d.name)}`;
+            const noteHtml = d.note ? ` <span class="text-muted">· ${escHtml(d.note)}</span>` : '';
+            html += `<div class="special-card duty-card">
+                <span class="special-icon">🌙</span>
+                <span class="special-text"><strong>${who}</strong> 당직${noteHtml}</span>
+            </div>`;
+        });
+        html += `</div>`;
+    }
 
     if (data.my_tasks.length === 0) {
         html += '<p class="text-muted small mt-2 mb-0">등록된 업무가 없습니다.</p>';
@@ -763,6 +918,84 @@ document.getElementById('clearMyEmoji')?.addEventListener('click', () => {
 });
 
 renderDots();
+
+// ── 휴가 신청 모달 ────────────────────────────────────────
+{% if mode == 'personal' %}
+const VR_CREATE_URL = "{% url 'reports:vacation_request_create' %}";
+const vrTypeSel    = document.getElementById('vr_leave_type');
+const vrStart      = document.getElementById('vr_start_date');
+const vrEnd        = document.getElementById('vr_end_date');
+const vrEndWrap    = document.getElementById('vr_end_wrap');
+const vrHalfWrap   = document.getElementById('vr_half_wrap');
+const vrError      = document.getElementById('vrError');
+const vrModalEl    = document.getElementById('vacationRequestModal');
+const vrModal      = new bootstrap.Modal(vrModalEl);
+
+function vrUpdateFieldsByType() {
+    const t = vrTypeSel.value;
+    const needsHalf = (t === 'half' || t === 'quarter');
+    vrHalfWrap.classList.toggle('d-none', !needsHalf);
+    // 반차/반반차는 하루 — 종료일 숨김
+    vrEndWrap.classList.toggle('d-none', needsHalf);
+    if (needsHalf) {
+        vrEnd.value = vrStart.value;
+    }
+}
+vrTypeSel.addEventListener('change', vrUpdateFieldsByType);
+vrStart.addEventListener('change', () => {
+    if (!vrEnd.value || vrEnd.value < vrStart.value) vrEnd.value = vrStart.value;
+});
+
+// 모달 열릴 때 오늘 날짜 기본값
+vrModalEl.addEventListener('show.bs.modal', () => {
+    vrError.classList.add('d-none');
+    if (!vrStart.value) {
+        const today = new Date();
+        const iso = today.toISOString().slice(0, 10);
+        vrStart.value = iso;
+        vrEnd.value   = iso;
+    }
+});
+
+document.getElementById('vrSubmitBtn').addEventListener('click', () => {
+    vrError.classList.add('d-none');
+    const leaveType = vrTypeSel.value;
+    if (!leaveType) { showVrError('휴가 종류를 선택해주세요.'); return; }
+    if (!vrStart.value) { showVrError('시작일을 선택해주세요.'); return; }
+    const needsHalf = (leaveType === 'half' || leaveType === 'quarter');
+    const halfVal = document.querySelector('input[name="vr_half"]:checked')?.value || '';
+    if (needsHalf && !halfVal) { showVrError('오전/오후를 선택해주세요.'); return; }
+
+    const params = new URLSearchParams({
+        leave_type:  leaveType,
+        start_date:  vrStart.value,
+        end_date:    needsHalf ? vrStart.value : (vrEnd.value || vrStart.value),
+        half_period: halfVal,
+        reason:      document.getElementById('vr_reason').value.trim(),
+    });
+    fetch(VR_CREATE_URL, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params,
+    })
+    .then(async r => {
+        const d = await r.json();
+        if (!d.ok) {
+            showVrError(d.error || '신청 실패');
+            return;
+        }
+        vrModal.hide();
+        alert('휴가 신청이 접수되었습니다. 관리자 승인 후 처리됩니다.');
+        location.href = "{% url 'reports:vacation_my_list' %}";
+    })
+    .catch(() => showVrError('서버 오류'));
+});
+
+function showVrError(msg) {
+    vrError.textContent = msg;
+    vrError.classList.remove('d-none');
+}
+{% endif %}
 </script>
 {% endblock %}
 

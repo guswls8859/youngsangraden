@@ -282,6 +282,93 @@ class ExternalEvent(models.Model):
         return f'[{self.ops.report_date}] {self.name}'
 
 
+class VacationRequest(models.Model):
+    """휴가 신청 — 직원이 신청, 관리자가 승인/반려"""
+    LEAVE_TYPE_CHOICES = [
+        ('annual',     '연차'),
+        ('half',       '반차'),
+        ('quarter',    '반반차'),
+        ('sick',       '병가'),
+        ('etc',        '기타'),
+    ]
+    HALF_PERIOD_CHOICES = [
+        ('am', '오전'),
+        ('pm', '오후'),
+    ]
+    STATUS_CHOICES = [
+        ('pending',  '대기'),
+        ('approved', '승인'),
+        ('rejected', '반려'),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='vacation_requests',
+        verbose_name='신청자',
+    )
+    leave_type   = models.CharField(max_length=10, choices=LEAVE_TYPE_CHOICES, verbose_name='휴가 종류')
+    start_date   = models.DateField(verbose_name='시작일')
+    end_date     = models.DateField(verbose_name='종료일')
+    half_period  = models.CharField(
+        max_length=2, choices=HALF_PERIOD_CHOICES,
+        blank=True, verbose_name='반차/반반차 시간대'
+    )
+    reason       = models.TextField(blank=True, verbose_name='사유')
+
+    status       = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending', verbose_name='상태')
+    reviewed_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reviewed_vacations',
+        verbose_name='검토자',
+    )
+    reviewed_at     = models.DateTimeField(null=True, blank=True, verbose_name='검토 일시')
+    review_comment  = models.TextField(blank=True, verbose_name='검토 메모')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = '휴가 신청'
+        verbose_name_plural = '휴가 신청 목록'
+        ordering = ['-start_date', '-created_at']
+
+    def __str__(self):
+        return f'{self.user} {self.start_date}~{self.end_date} {self.get_leave_type_display()} ({self.get_status_display()})'
+
+
+class DutyShift(models.Model):
+    """당직 근무 — 관리자가 등록·편집"""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='duty_shifts',
+        verbose_name='담당자',
+    )
+    date = models.DateField(verbose_name='근무일')
+    note = models.CharField(max_length=200, blank=True, verbose_name='비고')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='created_duties',
+        verbose_name='등록자',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = '당직 근무'
+        verbose_name_plural = '당직 근무 목록'
+        ordering = ['-date']
+        unique_together = ['user', 'date']
+
+    def __str__(self):
+        return f'{self.date} {self.user}'
+
+
 class FacilityWorkPhoto(models.Model):
     """일일보고 운영관리 작업사진 (구역별)"""
     CATEGORY_CHOICES = [

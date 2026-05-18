@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% block title %}당직 관리 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0">
+        <i class="bi bi-moon-stars-fill text-indigo"></i> 당직 관리
+    </h4>
+    <span class="text-muted small">
+        <i class="bi bi-info-circle"></i> 날짜를 클릭하면 당직자를 등록할 수 있습니다.
+    </span>
+</div>
+
+<!-- 월 네비게이션 -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="?year={{ prev_year }}&month={{ prev_month }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> 이전 달
+            </a>
+            <span class="fw-bold fs-5">{{ year }}년 {{ month }}월</span>
+            <a href="?year={{ next_year }}&month={{ next_month }}" class="btn btn-sm btn-outline-secondary">
+                다음 달 <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 캘린더 -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body p-2">
+        <table class="table table-bordered mb-0 duty-cal">
+            <thead class="table-light text-center">
+                <tr>
+                    <th class="text-danger">일</th>
+                    <th>월</th><th>화</th><th>수</th><th>목</th><th>금</th>
+                    <th class="text-primary">토</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for week in cal %}
+            <tr>
+                {% for day in week %}
+                {% if day == 0 %}
+                <td class="bg-light"></td>
+                {% else %}
+                <td class="duty-day {% if day == today.day and year == today.year and month == today.month %}today-cell{% endif %}"
+                    data-date="{{ year }}-{{ month|stringformat:'02d' }}-{{ day|stringformat:'02d' }}">
+                    <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}">
+                        {{ day }}
+                    </div>
+                    <div class="duty-list" data-day="{{ day }}"></div>
+                </td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 당직 등록 모달 -->
+<div class="modal fade" id="dutyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold" id="dutyModalLabel"></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="dutyError" class="alert alert-danger py-2 d-none small"></div>
+
+                <!-- 기존 당직 목록 -->
+                <div id="dutyExisting"></div>
+
+                <hr class="my-3">
+
+                <!-- 새 당직 등록 -->
+                <div class="fw-semibold mb-2 small">새 당직 등록</div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold mb-1">담당자 *</label>
+                    <select id="duty_user" class="form-select form-select-sm">
+                        <option value="">-- 선택 --</option>
+                        {% for u in staff_list %}
+                        <option value="{{ u.pk }}">
+                            {% if u.emoji %}{{ u.emoji }} {% endif %}{{ u.get_full_name|default:u.username }}
+                            {% if u.department %} · {{ u.department }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold mb-1">비고 (선택)</label>
+                    <input type="text" id="duty_note" class="form-control form-control-sm" placeholder="예: 야간, 휴일" maxlength="200">
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-sm btn-primary" id="dutySaveBtn">
+                    <i class="bi bi-plus-lg"></i> 추가
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.duty-cal { table-layout: fixed; }
+.duty-cal td, .duty-cal th { width: calc(100%/7); }
+.duty-day { vertical-align: top; padding: 6px; height: 120px; cursor: pointer; transition: background .12s; }
+.duty-day:hover { background-color: #f0f4ff; }
+.today-cell { background-color: #fff9e6 !important; }
+.today-cell:hover { background-color: #fdf3c8 !important; }
+.day-num {
+    font-size: 0.82rem; font-weight: 700; margin-bottom: 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+}
+.duty-list { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.duty-tag {
+    border-radius: 4px; font-size: 0.72rem; padding: 2px 5px;
+    font-weight: 600;
+    background: #e8eaf6; color: #3949ab; border: 1px solid #c5cae9;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: block; line-height: 1.4;
+}
+.duty-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 6px;
+    background: #f8f9fa; margin-bottom: 6px;
+}
+.duty-row-info { font-size: 0.85rem; }
+.duty-row-name { font-weight: 600; }
+.duty-row-note { font-size: 0.75rem; color: #6c757d; }
+.text-indigo { color: #3949ab !important; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF            = '{{ csrf_token }}';
+const DAY_DUTIES      = {{ day_duties_json|safe }};
+const CREATE_URL      = "{% url 'reports:duty_create' %}";
+const DELETE_BASE     = "/reports/duty/";
+
+let selectedDate = '';
+const dutyModalEl = document.getElementById('dutyModal');
+const dutyModal   = new bootstrap.Modal(dutyModalEl);
+const dutyError   = document.getElementById('dutyError');
+
+// 배지 렌더
+function renderDuties() {
+    document.querySelectorAll('.duty-list').forEach(el => {
+        const day = String(el.dataset.day);
+        const items = DAY_DUTIES[day];
+        if (!items) return;
+        el.innerHTML = '';
+        items.forEach(d => {
+            const tag = document.createElement('span');
+            tag.className = 'duty-tag';
+            const emoji = d.emoji ? `${d.emoji} ` : '';
+            const noteHtml = d.note ? ` <span style="font-weight:400">(${escHtml(d.note)})</span>` : '';
+            tag.innerHTML = `${emoji}${escHtml(d.name)}${noteHtml}`;
+            el.appendChild(tag);
+        });
+    });
+}
+
+function escHtml(s) {
+    return (s || '').toString()
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 셀 클릭 → 모달
+document.querySelectorAll('.duty-day').forEach(cell => {
+    cell.addEventListener('click', () => {
+        selectedDate = cell.dataset.date;
+        openDutyModal(selectedDate);
+    });
+});
+
+function openDutyModal(dateStr) {
+    const [y, m, d] = dateStr.split('-');
+    document.getElementById('dutyModalLabel').textContent =
+        `${y}년 ${parseInt(m)}월 ${parseInt(d)}일 당직`;
+    dutyError.classList.add('d-none');
+    document.getElementById('duty_user').value = '';
+    document.getElementById('duty_note').value = '';
+    renderExistingDuties(dateStr);
+    dutyModal.show();
+}
+
+function renderExistingDuties(dateStr) {
+    const day = String(parseInt(dateStr.split('-')[2]));
+    const items = DAY_DUTIES[day] || [];
+    const wrap = document.getElementById('dutyExisting');
+    if (items.length === 0) {
+        wrap.innerHTML = '<p class="small text-muted mb-2">등록된 당직이 없습니다.</p>';
+        return;
+    }
+    let html = '<div class="fw-semibold mb-2 small">등록된 당직</div>';
+    items.forEach(d => {
+        const emoji = d.emoji ? `${d.emoji} ` : '';
+        const noteHtml = d.note
+            ? `<div class="duty-row-note">${escHtml(d.note)}</div>`
+            : '';
+        html += `<div class="duty-row">
+            <div class="duty-row-info">
+                <div class="duty-row-name">${emoji}${escHtml(d.name)}</div>
+                ${noteHtml}
+            </div>
+            <button class="btn btn-sm btn-outline-danger py-0 duty-del-btn" data-pk="${d.pk}" style="font-size:.72rem">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>`;
+    });
+    wrap.innerHTML = html;
+
+    wrap.querySelectorAll('.duty-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!confirm('이 당직을 삭제하시겠습니까?')) return;
+            fetch(`${DELETE_BASE}${btn.dataset.pk}/delete/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' },
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) { showDutyError(d.error || '삭제 실패'); return; }
+                removeDutyFromState(dateStr, parseInt(btn.dataset.pk));
+                renderExistingDuties(dateStr);
+                renderDuties();
+            });
+        });
+    });
+}
+
+function removeDutyFromState(dateStr, pk) {
+    const day = String(parseInt(dateStr.split('-')[2]));
+    if (!DAY_DUTIES[day]) return;
+    DAY_DUTIES[day] = DAY_DUTIES[day].filter(x => x.pk !== pk);
+    if (DAY_DUTIES[day].length === 0) delete DAY_DUTIES[day];
+}
+
+function addDutyToState(dateStr, item) {
+    const day = String(parseInt(dateStr.split('-')[2]));
+    if (!DAY_DUTIES[day]) DAY_DUTIES[day] = [];
+    DAY_DUTIES[day].push(item);
+}
+
+document.getElementById('dutySaveBtn').addEventListener('click', () => {
+    dutyError.classList.add('d-none');
+    const userId = document.getElementById('duty_user').value;
+    const note   = document.getElementById('duty_note').value.trim();
+    if (!userId) { showDutyError('담당자를 선택해주세요.'); return; }
+
+    fetch(CREATE_URL, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ user_id: userId, date: selectedDate, note }),
+    })
+    .then(async r => {
+        const d = await r.json();
+        if (!d.ok) { showDutyError(d.error || '저장 실패'); return; }
+        addDutyToState(selectedDate, {
+            pk: d.pk, name: d.name, emoji: d.emoji, note: d.note,
+        });
+        renderExistingDuties(selectedDate);
+        renderDuties();
+        document.getElementById('duty_user').value = '';
+        document.getElementById('duty_note').value = '';
+    });
+});
+
+function showDutyError(msg) {
+    dutyError.textContent = msg;
+    dutyError.classList.remove('d-none');
+}
+
+renderDuties();
+</script>
+{% endblock %}
