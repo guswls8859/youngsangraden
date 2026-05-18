@@ -856,6 +856,9 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
             report_date=target_date,
             defaults={'created_by': request.user},
         )
+        # GODATA 자동수집으로 먼저 생성된 경우 created_by가 비어있음 → 첫 저장 시 채움
+        if not ops.created_by_id:
+            ops.created_by = request.user
 
         def _int(key, default=0):
             raw = request.POST.get(key, default)
@@ -1323,6 +1326,38 @@ def integrated_daily_pdf(request):
     return response
 
 
+def _validate_for_download(ops, eoulrim, jamjam, kumnare, info):
+    """한글 다운로드 전 필수 항목 입력 검증. 누락 메시지 리스트 반환."""
+    errors = []
+    if not ops or not ops.pk:
+        errors.append('일일보고 데이터가 없습니다. 입력 후 저장해주세요.')
+        return errors
+    if not ops.created_by_id:
+        errors.append('저장 버튼을 먼저 눌러주세요. (작성자 정보 없음)')
+        return errors
+
+    # 1. 금일 방문현황
+    if (ops.main_gate_walk + ops.sub_gate_walk + ops.car_visit) == 0:
+        errors.append('"금일 방문현황"이 입력되지 않았습니다.')
+    # 2. 주차장 (대수)
+    if (ops.parking_family + ops.parking_disabled + ops.parking_pregnant + ops.parking_children) == 0:
+        errors.append('"주차장(대수)"이 입력되지 않았습니다.')
+    # 3. 편익시설 매출 (자동 OR 수기 합계)
+    e = (eoulrim.daily_net_sales if eoulrim else 0) or ops.manual_eoulrim_sales
+    j = (jamjam.daily_net_sales  if jamjam  else 0) or ops.manual_jamjam_sales
+    k = (kumnare.sales_amount    if kumnare else 0) or ops.manual_kumnare_sales
+    if (e + j + k) == 0:
+        errors.append('"편익시설 매출"이 입력되지 않았습니다.')
+    # 4. 세부 이용현황
+    s  = (info.shuttle_total if info else 0) or ops.manual_shuttle_total
+    r  = (kumnare.rental_total_users if kumnare else 0) or ops.manual_rental_total
+    st = (kumnare.stamp_issued       if kumnare else 0) or ops.manual_stamp_total
+    if (s + r + st) == 0:
+        errors.append('"세부 이용현황"이 입력되지 않았습니다.')
+
+    return errors
+
+
 @login_required
 def integrated_daily_hwp(request):
     """용산어린이정원 일일보고 한글파일 다운로드"""
@@ -1336,6 +1371,17 @@ def integrated_daily_hwp(request):
         target_date = timezone.localdate()
 
     data = _gather_integrated_data(target_date)
+
+    # ── 필수 항목 검증 (값 없거나 미저장 시 차단) ───────────
+    errors = _validate_for_download(
+        data['ops_data'], data['eoulrim_report'],
+        data['jamjam_report'], data['kumnare_report'], data['info_report'],
+    )
+    if errors:
+        from django.contrib import messages
+        for e in errors:
+            messages.error(request, e)
+        return redirect(f'/reports/integrated/?date={target_date}')
 
     from .weather import fetch_tomorrow_weather
     ops = data['ops_data']

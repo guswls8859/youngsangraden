@@ -1,9 +1,9 @@
 """APScheduler 스케줄 설정
 
 자동 수집 시각:
-  - 평일 (월~금): 17:30 KST
-  - 토요일:       20:30 KST
-  - 일요일:       17:30 KST
+  - 평일 (월~금): 17:50 KST
+  - 토요일:       20:50 KST
+  - 일요일:       17:50 KST
 """
 import logging
 
@@ -17,38 +17,38 @@ def start():
 
     scheduler = BackgroundScheduler(timezone='Asia/Seoul')
 
-    # 평일(월~금) 17:30
+    # 평일(월~금) 17:50
     scheduler.add_job(
         _run_sync,
-        trigger=CronTrigger(day_of_week='mon-fri', hour=17, minute=30, timezone='Asia/Seoul'),
+        trigger=CronTrigger(day_of_week='mon-fri', hour=17, minute=50, timezone='Asia/Seoul'),
         id='godata_weekday',
-        name='GODATA 평일 자동수집 (17:30)',
+        name='GODATA 평일 자동수집 (17:50)',
         replace_existing=True,
         misfire_grace_time=600,   # 10분 이내 늦게 실행돼도 허용
     )
 
-    # 토요일 20:30
+    # 토요일 20:50
     scheduler.add_job(
         _run_sync,
-        trigger=CronTrigger(day_of_week='sat', hour=20, minute=30, timezone='Asia/Seoul'),
+        trigger=CronTrigger(day_of_week='sat', hour=20, minute=50, timezone='Asia/Seoul'),
         id='godata_saturday',
-        name='GODATA 토요일 자동수집 (20:30)',
+        name='GODATA 토요일 자동수집 (20:50)',
         replace_existing=True,
         misfire_grace_time=600,
     )
 
-    # 일요일 17:30
+    # 일요일 17:50
     scheduler.add_job(
         _run_sync,
-        trigger=CronTrigger(day_of_week='sun', hour=17, minute=30, timezone='Asia/Seoul'),
+        trigger=CronTrigger(day_of_week='sun', hour=17, minute=50, timezone='Asia/Seoul'),
         id='godata_sunday',
-        name='GODATA 일요일 자동수집 (17:30)',
+        name='GODATA 일요일 자동수집 (17:50)',
         replace_existing=True,
         misfire_grace_time=600,
     )
 
     scheduler.start()
-    logger.info('GODATA 자동수집 스케줄러 시작 — 평일 17:30 / 토요일 20:30 / 일요일 17:30')
+    logger.info('GODATA 자동수집 스케줄러 시작 — 평일 17:50 / 토요일 20:50 / 일요일 17:50')
     return scheduler
 
 

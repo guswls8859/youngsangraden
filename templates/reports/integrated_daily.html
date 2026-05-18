@@ -10,7 +10,7 @@
             <i class="bi bi-file-earmark-pdf"></i> PDF 출력
         </a> -->
         <a href="{% url 'reports:integrated_daily_hwp' %}?date={{ target_date|date:'Y-m-d' }}"
-           class="btn btn-outline-success btn-sm">
+           class="btn btn-outline-success btn-sm hwp-download-btn">
             <i class="bi bi-file-earmark-word"></i> 한글(다운)
         </a>
         <a href="{% url 'reports:integrated_daily_excel' %}" class="btn btn-outline-secondary btn-sm">
@@ -61,8 +61,8 @@
                 <strong>금일 입장 총수 자동수집 (GODATA 피플카운트)</strong><br>
                 <span class="text-muted">
                     방문자 수(금일 입장 총수)는 GODATA에서 자동으로 가져옵니다.
-                    <span class="fw-semibold text-dark">평일·일요일 17:30</span>,
-                    <span class="fw-semibold text-dark">토요일 20:30</span>에 자동 갱신됩니다.
+                    <span class="fw-semibold text-dark">평일·일요일 17:50</span>,
+                    <span class="fw-semibold text-dark">토요일 20:50</span>에 자동 갱신됩니다.
                 </span>
                 {% if ops and ops.updated_at %}
                 <br>
@@ -766,9 +766,44 @@
             <i class="bi bi-file-earmark-pdf"></i> PDF 출력
         </a> -->
         <a href="{% url 'reports:integrated_daily_hwp' %}?date={{ target_date|date:'Y-m-d' }}"
-           class="btn btn-outline-success">
+           class="btn btn-outline-success hwp-download-btn">
             <i class="bi bi-file-earmark-word"></i> 한글(다운)
         </a>
     </div>
 </form>
+
+<!-- 폼 dirty 감지 — 변경 후 저장 안 한 상태에서 한글 다운로드 차단 -->
+<script>
+(function(){
+    const form = document.querySelector('form[enctype="multipart/form-data"]');
+    if (!form) return;
+    const hwpBtns = document.querySelectorAll('.hwp-download-btn');
+    let dirty = false;
+
+    function setDirty(){
+        if (dirty) return;
+        dirty = true;
+        hwpBtns.forEach(btn => {
+            btn.classList.add('disabled');
+            btn.style.opacity = .55;
+            btn.style.pointerEvents = 'auto';  // 클릭은 허용해서 안내 표시
+            btn.title = '저장하지 않은 변경 사항이 있습니다. 저장 후 다운로드하세요.';
+        });
+    }
+
+    // input, textarea, select 변경 감지
+    form.addEventListener('input',  setDirty);
+    form.addEventListener('change', setDirty);
+
+    // 다운로드 버튼 클릭 시 dirty면 차단
+    hwpBtns.forEach(btn => {
+        btn.addEventListener('click', e => {
+            if (dirty) {
+                e.preventDefault();
+                alert('변경된 내용이 있습니다. 저장 버튼을 먼저 눌러주세요.');
+            }
+        });
+    });
+})();
+</script>
 {% endblock %}
