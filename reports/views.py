@@ -1153,7 +1153,7 @@ def integrated_daily_excel(request):
 
         row_values = [
             ops.report_date,
-            f'=SUM(C{r}:M{r})',
+            ops.today_total,
             _slot(ops.slot_0900_main, ops.slot_0900_sub),
             _slot(ops.slot_1000_main, ops.slot_1000_sub),
             _slot(ops.slot_1100_main, ops.slot_1100_sub),
