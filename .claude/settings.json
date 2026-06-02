@@ -6,7 +6,10 @@
       "Bash(python -c ' *)",
       "Bash(python manage.py check admin)",
       "Bash(python manage.py shell -c ' *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(python -c \"import weasyprint; print\\('weasyprint OK'\\)\")",
+      "Bash(python -c \"import markdown; print\\('markdown OK'\\)\")",
+      "Bash(python -c \"import mistune; print\\('mistune OK'\\)\")"
     ]
   }
 }

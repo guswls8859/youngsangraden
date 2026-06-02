@@ -1153,7 +1153,7 @@ def integrated_daily_excel(request):
 
         row_values = [
             ops.report_date,
-            ops.today_total,
+            ops.today_total,#여기 수정 했으니 참고하자
             _slot(ops.slot_0900_main, ops.slot_0900_sub),
             _slot(ops.slot_1000_main, ops.slot_1000_sub),
             _slot(ops.slot_1100_main, ops.slot_1100_sub),
@@ -1220,9 +1220,9 @@ def _sf_slot(sf_reservations, sf_entries, field_types, start_time):
                 rv = next((r for r in sf_reservations
                            if r.field_type in field_types and r.time_start == start_time), None)
                 res = rv.total_users if rv and rv.total_users else None
-            # 입장인원: actual_* 필드
+            # 입장인원: actual_* 필드 (성인/어린이 둘 다 합산)
             act = None
-            if e.actual_adult_count is not None:
+            if e.actual_adult_count is not None or e.actual_child_count is not None:
                 act = (e.actual_adult_count or 0) + (e.actual_child_count or 0)
             return {
                 'cat':      CAT.get(e.category, e.category),
@@ -1231,10 +1231,13 @@ def _sf_slot(sf_reservations, sf_entries, field_types, start_time):
             }
     for r in sf_reservations:
         if r.field_type in field_types and r.time_start == start_time:
+            act = None
+            if r.actual_adult_count is not None or r.actual_child_count is not None:
+                act = (r.actual_adult_count or 0) + (r.actual_child_count or 0)
             return {
                 'cat':      '일반',
                 'reserved': r.total_users,
-                'actual':   r.actual_adult_count,
+                'actual':   act,
             }
     return {'cat': None, 'reserved': None, 'actual': None}
 
@@ -1270,9 +1273,9 @@ def _sf_day_total_by_cat(sf_reservations, sf_entries, cat):
         for r in sf_reservations:
             if (r.field_type, r.time_start) not in quarter_keys:
                 if (r.field_type, r.time_start) not in entry_keys:
-                    # entry 없는 일반 예약: reservation 기준
+                    # entry 없는 일반 예약: reservation 기준 (성인+어린이 합산)
                     total_res += r.total_users or 0
-                    total_act += r.actual_adult_count or 0
+                    total_act += (r.actual_adult_count or 0) + (r.actual_child_count or 0)
 
     return {
         'cat':      cat,
