@@ -137,6 +137,7 @@ class SubTask(models.Model):
     )
     title = models.CharField(max_length=300, verbose_name='서브 업무명')
     is_done = models.BooleanField(default=False, verbose_name='완료 여부')
+    completed_date = models.DateField(null=True, blank=True, verbose_name='완료 일자')
     order = models.PositiveIntegerField(default=0, verbose_name='순서')
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -190,6 +190,25 @@ def _build_daily_task_story(target_date, users_tasks):
         lines = '<br/>'.join(f'• {t.task_name}' for t in tasks)
         return Paragraph(lines, cell_s)
 
+    def done_para(done_tasks, pending_tasks):
+        """완료 섹션: 완전히 완료된 업무 + 해당 날짜에 완료된 서브업무"""
+        items = [f'• {t.task_name}' for t in done_tasks]
+        for t in pending_tasks:
+            done_subs = [s for s in t.subtasks.all()
+                         if s.is_done and s.completed_date == target_date]
+            for s in done_subs:
+                items.append(f'• [{t.task_name}] {s.title}')
+        if not items:
+            return Paragraph('', cell_s)
+        return Paragraph('<br/>'.join(items), cell_s)
+
+    def done_count(done_tasks, pending_tasks):
+        n = len(done_tasks)
+        for t in pending_tasks:
+            n += sum(1 for s in t.subtasks.all()
+                     if s.is_done and s.completed_date == target_date)
+        return n
+
     story = []
 
     # ── 1. 헤더 (제목 + 결재란) ──────────────────────────────
@@ -239,15 +258,16 @@ def _build_daily_task_story(target_date, users_tasks):
     r = 1
     for user, done, pending in users_tasks:
         name = user.get_full_name() or user.username
-    
+
         h_name    = 8*mm
-        h_done    = max(20*mm, 5.5*mm * len(done))    if done    else 20*mm
+        done_n    = done_count(done, pending)
+        h_done    = max(20*mm, 5.5*mm * done_n)        if done_n  else 20*mm
         h_pending = max(14*mm, 5.5*mm * len(pending)) if pending else 14*mm
 
         for label, content, h in [
-            ('보고자',     Paragraph(name, cell_s), h_name),
-            ('업무사항',   task_para(done),          h_done),
-            ('익일업무계획', task_para(pending),      h_pending),
+            ('보고자',       Paragraph(name, cell_s), h_name),
+            ('업무사항',     done_para(done, pending), h_done),
+            ('진행중인 업무', task_para(pending),       h_pending),
         ]:
             all_data.append([Paragraph(label, label_s), content, '', ''])
             all_heights.append(h)

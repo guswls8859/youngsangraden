@@ -43,152 +43,211 @@
     <div class="col-4">
         <div class="card shadow-sm text-center border-success">
             <div class="card-body py-2">
-                <div class="fs-2 fw-bold text-success">{{ done_tasks.count }}</div>
-                <div class="text-muted small">금일 완료</div>
+                <div class="fs-2 fw-bold text-success">{{ total_done_count }}</div>
+                <div class="text-muted small">금일 완료
+                    {% if total_done_subtask_count %}
+                    <span class="text-secondary" style="font-size:.72rem">(서브 {{ total_done_subtask_count }})</span>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
     <div class="col-4">
         <div class="card shadow-sm text-center border-warning">
             <div class="card-body py-2">
-                <div class="fs-2 fw-bold text-warning">{{ pending_tasks.count }}</div>
-                <div class="text-muted small">진행 예정</div>
+                <div class="fs-2 fw-bold text-warning">{{ total_pending_count }}</div>
+                <div class="text-muted small">진행 중</div>
             </div>
         </div>
     </div>
     <div class="col-4">
         <div class="card shadow-sm text-center">
             <div class="card-body py-2">
-                <div class="fs-2 fw-bold">{{ done_tasks.count|add:pending_tasks.count }}</div>
-                <div class="text-muted small">총 등록</div>
+                <div class="fs-2 fw-bold">{{ users_data|length }}</div>
+                <div class="text-muted small">인원 수</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 금일 완료 업무 -->
-<div class="card shadow-sm mb-4">
-    <div class="card-header fw-bold">
-        <i class="bi bi-check-circle-fill text-success"></i> 금일 완료 업무
-        <span class="badge bg-success ms-1">{{ done_tasks.count }}</span>
-    </div>
-    {% if done_tasks %}
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>업무명</th>
-                    <th>작성자</th>
-                    <th class="d-none d-md-table-cell">부서</th>
-                    <th class="d-none d-sm-table-cell">진행도</th>
-                    <th class="d-none d-lg-table-cell">비고</th>
-                    <th style="width:130px">검토</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for task in done_tasks %}
-                <tr id="task-row-{{ task.pk }}">
-                    <td class="fw-semibold">{{ task.task_name }}</td>
-                    <td>{{ task.user.get_full_name|default:task.user.username }}</td>
-                    <td class="d-none d-md-table-cell text-muted small">{{ task.user.department|default:"-" }}</td>
-                    <td class="d-none d-sm-table-cell">
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="progress flex-grow-1" style="height:8px; min-width:60px">
-                                <div class="progress-bar bg-success" style="width:100%"></div>
-                            </div>
-                            <span class="badge bg-success">100%</span>
-                        </div>
-                    </td>
-                    <td class="d-none d-lg-table-cell small text-muted">{{ task.note|default:"-"|truncatechars:50 }}</td>
-                    <td style="white-space:nowrap">
-                        {% if task.is_reviewed %}
-                        <div class="d-flex align-items-center gap-1">
-                            <span class="badge bg-success" title="{{ task.reviewed_by.get_full_name|default:'' }} {{ task.reviewed_at|date:'m/d H:i' }}">
-                                <i class="bi bi-patch-check-fill"></i> 검토완료
-                            </span>
-                            <button class="btn btn-link btn-sm p-0 text-muted review-btn"
-                                    data-pk="{{ task.pk }}" title="검토 취소">
-                                <i class="bi bi-x-circle"></i>
-                            </button>
-                        </div>
-                        {% else %}
-                        <button class="btn btn-outline-success btn-sm review-btn" data-pk="{{ task.pk }}">
-                            <i class="bi bi-patch-check"></i> 검토
-                        </button>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="card-body text-center text-muted py-4">
-        <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-        완료된 업무가 없습니다.
-    </div>
-    {% endif %}
+<!-- 일괄 펼치기/접기 -->
+<div class="d-flex justify-content-end gap-2 mb-2">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="expandAllBtn">
+        <i class="bi bi-arrows-expand"></i> 모두 펼치기
+    </button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="collapseAllBtn">
+        <i class="bi bi-arrows-collapse"></i> 모두 접기
+    </button>
 </div>
 
-<!-- 명일 진행 예정 업무 -->
-<div class="card shadow-sm">
-    <div class="card-header fw-bold">
-        <i class="bi bi-arrow-right-circle text-warning"></i> 명일 진행 예정 업무
-        <span class="badge bg-warning text-dark ms-1">{{ pending_tasks.count }}</span>
-    </div>
-    {% if pending_tasks %}
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>업무명</th>
-                    <th>작성자</th>
-                    <th class="d-none d-md-table-cell">부서</th>
-                    <th class="d-none d-sm-table-cell">진행도</th>
-                    <th>상태</th>
-                    <th class="d-none d-lg-table-cell">비고</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for task in pending_tasks %}
-                <tr>
-                    <td class="fw-semibold">{{ task.task_name }}</td>
-                    <td>{{ task.user.get_full_name|default:task.user.username }}</td>
-                    <td class="d-none d-md-table-cell text-muted small">{{ task.user.department|default:"-" }}</td>
-                    <td class="d-none d-sm-table-cell">
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="progress flex-grow-1" style="height:8px; min-width:60px">
-                                <div class="progress-bar
-                                    {% if task.progress >= 70 %}bg-success
-                                    {% elif task.progress >= 40 %}bg-warning
-                                    {% else %}bg-danger{% endif %}"
-                                    style="width:{{ task.progress }}%"></div>
-                            </div>
-                            <span class="small fw-semibold">{{ task.progress }}%</span>
-                        </div>
-                    </td>
-                    <td>
-                        {% if task.status == 'doing' %}<span class="badge bg-primary">진행중</span>
-                        {% elif task.status == 'hold' %}<span class="badge bg-secondary">보류</span>
+<!-- 사용자별 카드 -->
+{% if users_data %}
+<div class="user-list">
+{% for u in users_data %}
+<div class="card shadow-sm mb-2 user-card">
+    <button type="button"
+            class="card-header bg-white border-0 d-flex align-items-center w-100 text-start user-toggle"
+            data-bs-toggle="collapse"
+            data-bs-target="#user-body-{{ u.user.pk }}"
+            aria-expanded="false">
+        <i class="bi bi-chevron-right user-chevron me-2"></i>
+        {% if u.user.emoji %}<span class="me-1">{{ u.user.emoji }}</span>{% endif %}
+        <span class="fw-bold me-2">{{ u.user.get_full_name|default:u.user.username }}</span>
+        {% if u.user.department %}
+        <span class="small text-muted me-3">{{ u.user.department }}</span>
+        {% endif %}
+        <span class="ms-auto d-flex gap-1">
+            {% if u.done_count %}
+            <span class="badge bg-success">완료 {{ u.done_count }}{% if u.sub_count %} <span style="font-weight:400">(서브 {{ u.sub_count }})</span>{% endif %}</span>
+            {% endif %}
+            {% if u.pending_count %}
+            <span class="badge bg-warning text-dark">진행 {{ u.pending_count }}</span>
+            {% endif %}
+            {% if not u.done_count and not u.pending_count %}
+            <span class="badge bg-light text-muted">업무 없음</span>
+            {% endif %}
+        </span>
+    </button>
+
+    <div class="collapse" id="user-body-{{ u.user.pk }}">
+        <div class="card-body pt-2">
+            <!-- 완료 -->
+            {% if u.done_tasks or u.done_subtasks %}
+            <div class="mb-3">
+                <div class="section-label text-success">
+                    <i class="bi bi-check-circle-fill"></i> 금일 완료
+                </div>
+                <ul class="task-ul">
+                    {% for task in u.done_tasks %}
+                    <li id="task-row-{{ task.pk }}">
+                        <span class="fw-semibold">{{ task.task_name }}</span>
+                        {% if task.note %}
+                        <span class="text-muted small ms-1">— {{ task.note|truncatechars:60 }}</span>
                         {% endif %}
-                    </td>
-                    <td class="d-none d-lg-table-cell small text-muted">{{ task.note|default:"-"|truncatechars:50 }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        <span class="ms-2">
+                            {% if task.is_reviewed %}
+                            <span class="badge bg-success" style="font-size:.7rem"
+                                  title="{{ task.reviewed_by.get_full_name|default:'' }} {{ task.reviewed_at|date:'m/d H:i' }}">
+                                <i class="bi bi-patch-check-fill"></i> 검토완료
+                            </span>
+                            <button class="btn btn-link btn-sm p-0 text-muted ms-1 review-btn"
+                                    data-pk="{{ task.pk }}" title="검토 취소" style="font-size:.7rem">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-success btn-sm review-btn py-0"
+                                    data-pk="{{ task.pk }}" style="font-size:.7rem">
+                                <i class="bi bi-patch-check"></i> 검토
+                            </button>
+                            {% endif %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                    {% for task, done_subs in u.done_subtasks %}
+                    {% for sub in done_subs %}
+                    <li class="subtask-li">
+                        <span class="badge bg-secondary me-1" style="font-size:.65rem">서브</span>
+                        <span class="text-muted small">[{{ task.task_name }}]</span>
+                        <span>{{ sub.title }}</span>
+                    </li>
+                    {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- 진행 중 -->
+            {% if u.pending_tasks %}
+            <div>
+                <div class="section-label text-warning">
+                    <i class="bi bi-arrow-right-circle-fill"></i> 진행 중인 업무
+                </div>
+                <ul class="task-ul">
+                    {% for task in u.pending_tasks %}
+                    <li>
+                        <span class="fw-semibold">{{ task.task_name }}</span>
+                        <span class="progress flex-grow-1 d-inline-block align-middle ms-2"
+                              style="height:6px; width:80px;">
+                            <div class="progress-bar
+                                {% if task.progress >= 70 %}bg-success
+                                {% elif task.progress >= 40 %}bg-warning
+                                {% else %}bg-danger{% endif %}"
+                                style="width:{{ task.progress }}%"></div>
+                        </span>
+                        <span class="small text-muted ms-1">{{ task.progress }}%</span>
+                        {% if task.status == 'hold' %}
+                        <span class="badge bg-secondary ms-1" style="font-size:.7rem">보류</span>
+                        {% endif %}
+                        {% if task.note %}
+                        <div class="text-muted small ms-3">— {{ task.note|truncatechars:80 }}</div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if not u.done_tasks and not u.done_subtasks and not u.pending_tasks %}
+            <p class="text-muted small mb-0">등록된 업무가 없습니다.</p>
+            {% endif %}
+        </div>
     </div>
-    {% else %}
-    <div class="card-body text-center text-muted py-4">
-        <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-        진행 예정 업무가 없습니다.
-    </div>
-    {% endif %}
 </div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card shadow-sm">
+    <div class="card-body text-center text-muted py-5">
+        <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+        해당 날짜에 등록된 업무가 없습니다.
+    </div>
+</div>
+{% endif %}
+
+<style>
+.user-card .user-toggle {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: 0.375rem;
+}
+.user-card .user-toggle:hover { background: #f8f9fa; }
+.user-card .user-toggle[aria-expanded="true"] {
+    background: #f0f4f8;
+    border-bottom: 1px solid #e9ecef !important;
+}
+.user-card .user-chevron {
+    transition: transform .15s ease;
+    color: #6c757d;
+    font-size: .9rem;
+}
+.user-card .user-toggle[aria-expanded="true"] .user-chevron {
+    transform: rotate(90deg);
+}
+.section-label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #f0f0f0;
+    padding-bottom: 3px;
+}
+.task-ul {
+    list-style: none;
+    padding-left: 4px;
+    margin: 0;
+}
+.task-ul > li {
+    padding: 4px 0;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 0.9rem;
+}
+.task-ul > li:last-child { border-bottom: none; }
+.subtask-li { padding-left: 12px !important; background: #fafbfc; }
+</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// 검토 토글
 function attachReviewBtn(btn) {
     btn.addEventListener('click', function () {
         const pk = this.dataset.pk;
@@ -202,27 +261,40 @@ function attachReviewBtn(btn) {
         .then(r => r.json())
         .then(data => {
             if (!data.ok) return;
-            const cell = document.querySelector(`#task-row-${pk} td:last-child`);
+            const li = document.getElementById(`task-row-${pk}`);
+            if (!li) return;
+            const span = li.querySelector('span.ms-2');
+            if (!span) return;
             if (data.is_reviewed) {
-                cell.innerHTML = `
-                    <div class="d-flex align-items-center gap-1">
-                        <span class="badge bg-success" title="${data.reviewed_by} ${data.reviewed_at}">
-                            <i class="bi bi-patch-check-fill"></i> 검토완료
-                        </span>
-                        <button class="btn btn-link btn-sm p-0 text-muted review-btn" data-pk="${pk}" title="검토 취소">
-                            <i class="bi bi-x-circle"></i>
-                        </button>
-                    </div>`;
+                span.innerHTML = `
+                    <span class="badge bg-success" style="font-size:.7rem" title="${data.reviewed_by} ${data.reviewed_at}">
+                        <i class="bi bi-patch-check-fill"></i> 검토완료
+                    </span>
+                    <button class="btn btn-link btn-sm p-0 text-muted ms-1 review-btn" data-pk="${pk}" title="검토 취소" style="font-size:.7rem">
+                        <i class="bi bi-x-circle"></i>
+                    </button>`;
             } else {
-                cell.innerHTML = `
-                    <button class="btn btn-outline-success btn-sm review-btn" data-pk="${pk}">
+                span.innerHTML = `
+                    <button class="btn btn-outline-success btn-sm review-btn py-0" data-pk="${pk}" style="font-size:.7rem">
                         <i class="bi bi-patch-check"></i> 검토
                     </button>`;
             }
-            cell.querySelectorAll('.review-btn').forEach(attachReviewBtn);
+            span.querySelectorAll('.review-btn').forEach(attachReviewBtn);
         });
     });
 }
 document.querySelectorAll('.review-btn').forEach(attachReviewBtn);
+
+// 일괄 펼치기/접기
+document.getElementById('expandAllBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.user-card .collapse').forEach(el => {
+        bootstrap.Collapse.getOrCreateInstance(el).show();
+    });
+});
+document.getElementById('collapseAllBtn')?.addEventListener('click', () => {
+    document.querySelectorAll('.user-card .collapse').forEach(el => {
+        bootstrap.Collapse.getOrCreateInstance(el).hide();
+    });
+});
 </script>
 {% endblock %}

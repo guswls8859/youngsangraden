@@ -429,6 +429,7 @@ def subtask_toggle(request, pk):
     subtask = get_object_or_404(SubTask, pk=pk, daily_task__user=request.user)
     if request.method == 'POST':
         subtask.is_done = not subtask.is_done
+        subtask.completed_date = timezone.localdate() if subtask.is_done else None
         subtask.save()
         subtask.daily_task.recalculate_progress()
         task = DailyTask.objects.get(pk=subtask.daily_task_id)
@@ -739,25 +740,67 @@ class TaskManagerReportView(ManagerRequiredMixin, TemplateView):
         except (TypeError, ValueError):
             target_date = timezone.localdate()
 
-        done_tasks = (
+        done_tasks = list(
             DailyTask.objects
             .filter(completed_date=target_date, status='done')
             .select_related('user')
-            .order_by('user__last_name', 'user__username')
+            .prefetch_related('subtasks')
         )
-        pending_tasks = (
+        pending_tasks = list(
             DailyTask.objects
             .filter(start_date__lte=target_date)
             .exclude(status='done')
             .select_related('user')
-            .order_by('user__last_name', 'user__username')
+            .prefetch_related('subtasks')
         )
+
+        # 사용자별 그룹핑
+        from collections import defaultdict
+        users_map = {}
+        done_by_user    = defaultdict(list)
+        pending_by_user = defaultdict(list)
+        done_subs_by_user = defaultdict(list)  # [(task, [subs]), ...]
+        total_done_subtask_count = 0
+
+        for t in done_tasks:
+            users_map[t.user_id] = t.user
+            done_by_user[t.user_id].append(t)
+        for t in pending_tasks:
+            users_map[t.user_id] = t.user
+            pending_by_user[t.user_id].append(t)
+            today_subs = [s for s in t.subtasks.all()
+                          if s.is_done and s.completed_date == target_date]
+            if today_subs:
+                done_subs_by_user[t.user_id].append((t, today_subs))
+                total_done_subtask_count += len(today_subs)
+
+        users_data = []
+        for uid, user in users_map.items():
+            d_subs = done_subs_by_user[uid]
+            sub_count = sum(len(subs) for _, subs in d_subs)
+            users_data.append({
+                'user':          user,
+                'done_tasks':    done_by_user[uid],
+                'done_subtasks': d_subs,
+                'pending_tasks': pending_by_user[uid],
+                'done_count':    len(done_by_user[uid]) + sub_count,
+                'sub_count':     sub_count,
+                'pending_count': len(pending_by_user[uid]),
+            })
+        users_data.sort(key=lambda d: (
+            (d['user'].last_name or '').lower(),
+            (d['user'].username or '').lower(),
+        ))
 
         ctx['target_date'] = target_date
         ctx['prev_date'] = target_date - datetime.timedelta(days=1)
         ctx['next_date'] = target_date + datetime.timedelta(days=1)
         ctx['done_tasks'] = done_tasks
         ctx['pending_tasks'] = pending_tasks
+        ctx['users_data'] = users_data
+        ctx['total_done_count']    = len(done_tasks) + total_done_subtask_count
+        ctx['total_pending_count'] = len(pending_tasks)
+        ctx['total_done_subtask_count'] = total_done_subtask_count
         return ctx
 
 
@@ -776,6 +819,7 @@ def task_daily_pdf(request):
         DailyTask.objects
         .filter(Q(completed_date=target_date) | Q(start_date__lte=target_date, status__in=('doing', 'hold')))
         .select_related('user')
+        .prefetch_related('subtasks')
         .order_by('user__last_name', 'user__username')
     )
     User = get_user_model()
@@ -863,6 +907,7 @@ def task_weekly_pdf(request):
             DailyTask.objects
             .filter(Q(completed_date=day) | Q(start_date__lte=day, status__in=('doing', 'hold')))
             .select_related('user')
+            .prefetch_related('subtasks')
             .order_by('user__last_name', 'user__username')
         )
 
