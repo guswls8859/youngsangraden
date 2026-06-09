@@ -141,3 +141,85 @@ def fetch_tomorrow_weather(report_date: datetime.date) -> dict | None:
     if result:
         _cache[report_date] = (result, now)
     return result
+
+
+# 범위 조회용 별도 캐시
+_range_cache: dict = {}
+
+
+def fetch_weather_range(start_date: datetime.date, end_date: datetime.date) -> dict:
+    """
+    start_date~end_date 사이 날짜별 기상예보 반환 (Open-Meteo 기반, 최대 16일).
+    반환: {date: {'temp_min', 'temp_max', 'rain_pct', 'code'}}
+    """
+    if start_date > end_date:
+        return {}
+
+    cache_key = (start_date.isoformat(), end_date.isoformat())
+    now = time.monotonic()
+    cached = _range_cache.get(cache_key)
+    if cached:
+        result, cached_at = cached
+        if now - cached_at < _CACHE_TTL:
+            return result
+
+    url = (
+        'https://api.open-meteo.com/v1/forecast'
+        f'?latitude={_LAT}&longitude={_LON}'
+        '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code'
+        '&timezone=Asia%2FSeoul'
+        f'&start_date={start_date.isoformat()}&end_date={end_date.isoformat()}'
+    )
+    result: dict = {}
+    try:
+        with urllib.request.urlopen(url, timeout=4) as resp:
+            data = json.loads(resp.read())
+        daily = data['daily']
+        for i, day_str in enumerate(daily['time']):
+            d = datetime.date.fromisoformat(day_str)
+            result[d] = {
+                'temp_min': round(daily['temperature_2m_min'][i]),
+                'temp_max': round(daily['temperature_2m_max'][i]),
+                'rain_pct': int(daily['precipitation_probability_max'][i] or 0),
+                'code':     int(daily['weather_code'][i] or 0),
+            }
+    except Exception:
+        return {}
+
+    _range_cache[cache_key] = (result, now)
+    return result
+
+
+# WMO weather code → 한국어 라벨 + 이모지 (대표 코드만)
+# 참고: https://open-meteo.com/en/docs#weather_variable_documentation
+_WMO_CODE = {
+    0:  ('맑음',     '☀️'),
+    1:  ('대체로 맑음', '🌤'),
+    2:  ('구름 조금', '⛅'),
+    3:  ('흐림',     '☁️'),
+    45: ('안개',     '🌫'),
+    48: ('짙은 안개', '🌫'),
+    51: ('약한 이슬비', '🌦'),
+    53: ('이슬비',   '🌦'),
+    55: ('짙은 이슬비', '🌧'),
+    61: ('약한 비',   '🌦'),
+    63: ('비',       '🌧'),
+    65: ('강한 비',   '🌧'),
+    71: ('약한 눈',   '🌨'),
+    73: ('눈',       '🌨'),
+    75: ('많은 눈',   '❄️'),
+    77: ('싸락눈',   '🌨'),
+    80: ('소나기',   '🌦'),
+    81: ('소나기',   '🌧'),
+    82: ('강한 소나기', '⛈'),
+    85: ('약한 눈 소나기', '🌨'),
+    86: ('강한 눈 소나기', '❄️'),
+    95: ('뇌우',     '⛈'),
+    96: ('우박 동반 뇌우', '⛈'),
+    99: ('강한 뇌우', '⛈'),
+}
+
+
+def weather_label(code: int) -> tuple[str, str]:
+    """weather_code → (한국어 설명, 이모지) — 알 수 없으면 빈 값"""
+    return _WMO_CODE.get(code, ('', ''))

@@ -593,6 +593,24 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
         day_vacations_json = json.dumps(day_vacations)
         day_duties_json    = json.dumps(day_duties)
 
+        # ── 날씨 (오늘 ~ 이달말, 최대 16일까지만) ────────────────
+        from .weather import fetch_weather_range, weather_label
+        wx_start = max(today, month_start)
+        wx_end   = min(month_end, today + datetime.timedelta(days=15))
+        weather_map = fetch_weather_range(wx_start, wx_end) if wx_start <= wx_end else {}
+
+        day_weather = {}
+        for d, w in weather_map.items():
+            label, emoji = weather_label(w['code'])
+            day_weather[d.day] = {
+                'tmin':  w['temp_min'],
+                'tmax':  w['temp_max'],
+                'rain':  w['rain_pct'],
+                'emoji': emoji,
+                'label': label,
+            }
+        day_weather_json = json.dumps(day_weather)
+
         emoji_list = [
             '☃️',
             # 동물
@@ -622,6 +640,7 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
             'day_dots_json': day_dots_json,
             'day_vacations_json': day_vacations_json,
             'day_duties_json': day_duties_json,
+            'day_weather_json': day_weather_json,
             'selected_date': self.request.GET.get('selected', ''),
             'mode': mode,
             'emoji_list': emoji_list,
