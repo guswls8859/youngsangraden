@@ -175,13 +175,14 @@
 <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header py-2">
+            <div class="modal-header py-2 draggable-handle" id="taskModalHeader">
                 <h6 class="modal-title fw-bold" id="modalDateLabel"></h6>
                 {% if mode == 'team' %}
                 <span class="badge bg-primary ms-2" style="font-size:.7rem"><i class="bi bi-people-fill"></i> 전체 일정</span>
                 {% else %}
                 <span class="badge bg-success ms-2" style="font-size:.7rem"><i class="bi bi-person-fill"></i> 개인 업무</span>
                 {% endif %}
+                <i class="bi bi-arrows-move ms-2 text-muted" style="font-size:.85rem" title="드래그하여 이동"></i>
                 <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="modalBody">
@@ -265,6 +266,10 @@
 .team-user-header { font-size: 0.78rem; font-weight: 700; color: #6c757d;
                     border-bottom: 1px solid #f0f0f0; padding-bottom: 3px; margin: 10px 0 6px; }
 .add-form-wrap { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-top: 8px; }
+/* 드래그 가능한 모달 */
+.draggable-handle { cursor: move; user-select: none; }
+#taskModal.dragging .modal-dialog { transition: none !important; }
+#taskModal .modal-dialog { will-change: transform; }
 /* 모달 휴가/당직 카드 */
 .specials-section { display: flex; flex-direction: column; gap: 4px; }
 .special-card {
@@ -301,6 +306,11 @@ const taskModal  = new bootstrap.Modal(document.getElementById('taskModal'));
 
 // ── 이름 태그 렌더링 ─────────────────────────────────────
 function renderDots() {
+    // 매번 다시 그리므로 기존 태그/배지 초기화
+    document.querySelectorAll('.cal-names, .cal-specials').forEach(el => {
+        el.innerHTML = '';
+    });
+
     document.querySelectorAll('.cal-names').forEach(el => {
         const day = String(el.dataset.day);
         const items = DAY_DOTS[day];
@@ -404,6 +414,9 @@ function formatDateLabel(d) {
 
 // ── 패널 렌더링 ──────────────────────────────────────────
 function renderPanel(data, dateStr) {
+    // 모달이 열릴 때마다 DAY_DOTS/휴가/당직 상태를 최신 데이터로 동기화하고 캘린더 셀 갱신
+    syncDayDotsFromPanel(dateStr, data);
+
     const isPersonal = MODE === 'personal';
     let html = '';
 
@@ -763,6 +776,7 @@ function bindPanelEvents(dateStr) {
                     span.textContent = taskName;
                     input.classList.add('d-none');
                     span.classList.remove('d-none');
+                    silentSyncDay(selectedDate);
                 }
             })
             .catch(() => { saving = false; });
@@ -804,6 +818,7 @@ function bindPanelEvents(dateStr) {
                     span.textContent = d.title;
                     input.classList.add('d-none');
                     span.classList.remove('d-none');
+                    silentSyncDay(selectedDate);
                 }
             });
         };
@@ -851,6 +866,8 @@ function bindPanelEvents(dateStr) {
                     badge.textContent = data.status_display;
                 }
                 taskCard.classList.toggle('done-card', data.progress === 100);
+                // 부모 업무가 자동 완료/재진행 처리되면 캘린더 셀에도 반영
+                silentSyncDay(selectedDate);
             });
         });
     });
@@ -950,6 +967,114 @@ document.getElementById('clearMyEmoji')?.addEventListener('click', () => {
 });
 
 renderDots();
+
+// ── 모달 드래그 ────────────────────────────────────────────
+(function setupDraggableModal() {
+    const modalEl   = document.getElementById('taskModal');
+    const dialog    = modalEl.querySelector('.modal-dialog');
+    const handle    = document.getElementById('taskModalHeader');
+    let offsetX = 0, offsetY = 0;
+    let startX = 0, startY = 0;
+    let dragging = false;
+
+    function onPointerDown(e) {
+        // 닫기 버튼이나 폼 요소 클릭은 드래그 무시
+        if (e.target.closest('.btn-close, button, input, textarea, select, a')) return;
+        dragging = true;
+        const rect = dialog.getBoundingClientRect();
+        // 현재 translate 값 추출
+        const tr = new DOMMatrixReadOnly(getComputedStyle(dialog).transform);
+        offsetX = tr.m41;
+        offsetY = tr.m42;
+        startX = e.clientX;
+        startY = e.clientY;
+        modalEl.classList.add('dragging');
+        document.body.style.cursor = 'move';
+        e.preventDefault();
+    }
+    function onPointerMove(e) {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        dialog.style.transform = `translate(${offsetX + dx}px, ${offsetY + dy}px)`;
+    }
+    function onPointerUp() {
+        if (!dragging) return;
+        dragging = false;
+        modalEl.classList.remove('dragging');
+        document.body.style.cursor = '';
+    }
+    handle.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('mousemove', onPointerMove);
+    document.addEventListener('mouseup', onPointerUp);
+
+    // 모달 열릴 때 위치 초기화
+    modalEl.addEventListener('show.bs.modal', () => {
+        dialog.style.transform = '';
+    });
+})();
+
+// ── 셀 실시간 갱신 ──────────────────────────────────────────
+// 모달에서 데이터를 받을 때마다 DAY_DOTS를 갱신하고 해당 셀만 다시 그린다.
+function syncDayDotsFromPanel(dateStr, data) {
+    const day = String(parseInt(dateStr.split('-')[2], 10));
+
+    if (MODE === 'personal') {
+        // 본인 업무만 보여주므로 my_tasks → task_name + status
+        const items = (data.my_tasks || []).map(t => ({
+            task_name: t.task_name, status: t.status,
+        }));
+        if (items.length) DAY_DOTS[day] = items;
+        else delete DAY_DOTS[day];
+    } else {
+        // team 모드: my_tasks + team_tasks를 user별로 집계
+        const all = [...(data.my_tasks || []), ...(data.team_tasks || [])];
+        const byUser = {};
+        all.forEach(t => {
+            const key = t.user_name;
+            if (!byUser[key]) {
+                byUser[key] = { name: t.user_name, emoji: t.user_emoji, total: 0, done: 0 };
+            }
+            byUser[key].total += 1;
+            if (t.status === 'done') byUser[key].done += 1;
+        });
+        const items = Object.values(byUser);
+        if (items.length) DAY_DOTS[day] = items;
+        else delete DAY_DOTS[day];
+    }
+
+    // 휴가/당직도 모달 응답에 포함되어 있으면 갱신
+    if (data.vacations !== undefined) {
+        const vs = (data.vacations || []).map(v => ({
+            name: v.name, emoji: v.emoji, type: v.type,
+        }));
+        if (vs.length) DAY_VACATIONS[day] = vs;
+        else delete DAY_VACATIONS[day];
+    }
+    if (data.duties !== undefined) {
+        const ds = (data.duties || []).map(d => ({
+            name: d.name, emoji: d.emoji, note: d.note,
+        }));
+        if (ds.length) DAY_DUTIES[day] = ds;
+        else delete DAY_DUTIES[day];
+    }
+
+    rerenderCell(day);
+}
+
+function rerenderCell(_day) {
+    // renderDots가 내부에서 cal-names/cal-specials를 초기화하고 전체 다시 그린다
+    renderDots();
+}
+
+// 모달 닫지 않고 캘린더 셀만 다시 그릴 때 사용 (서브업무 체크, 인라인 편집 등)
+function silentSyncDay(dateStr) {
+    if (!dateStr) return;
+    fetch(`/reports/calendar/${dateStr}/tasks/?mode=${MODE}`, { headers: { 'X-CSRFToken': CSRF } })
+        .then(r => r.json())
+        .then(data => syncDayDotsFromPanel(dateStr, data))
+        .catch(() => {});
+}
 
 // ── 휴가 신청 모달 ────────────────────────────────────────
 {% if mode == 'personal' %}
