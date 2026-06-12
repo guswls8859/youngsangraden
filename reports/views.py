@@ -10,7 +10,7 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, TemplateView
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from .models import DailyReport, TaskItem, DailyTask, SubTask, OperationsDailyData, VacationRequest, DutyShift
+from .models import DailyReport, TaskItem, DailyTask, SubTask, OperationsDailyData, VacationRequest, DutyShift, LadderGame
 from .forms import DailyReportForm, DailyTaskForm
 from .pdf import build_report_pdf, build_daily_pdf, build_weekly_pdf, build_daily_task_pdf, build_weekly_task_pdf
 
@@ -1907,3 +1907,152 @@ def vacation_reject(request, pk):
     vr.save()
     messages.success(request, f'{vr.user.get_full_name() or vr.user.username}님의 휴가 신청을 반려했습니다.')
     return redirect('reports:vacation_admin_list')
+
+
+# ── 사다리 타기 (운영사무국 공유) ─────────────────────────────
+import json as _ladder_json
+import random as _ladder_random
+
+_LADDER_ROWS = 10
+_LADDER_RUNG_PROB = 0.45
+
+
+def _serialize_ladder(g):
+    return {
+        'id':        g.pk,
+        'title':     g.title,
+        'players':   g.players,
+        'results':   g.results,
+        'rungs':     g.rungs,
+        'revealed':  g.revealed,
+        'created_by': g.created_by.get_full_name() if g.created_by else '',
+        'created_by_id': g.created_by_id,
+        'created_at': g.created_at.isoformat(),
+        'updated_at': g.updated_at.isoformat(),
+        'is_active':  g.is_active,
+    }
+
+
+def _build_rungs(n_cols):
+    """인접 열의 가로줄이 같은 행에 겹치지 않도록 무작위 생성."""
+    arr = [[False] * (n_cols - 1) for _ in range(_LADDER_ROWS)]
+    for r in range(_LADDER_ROWS):
+        for c in range(n_cols - 1):
+            if c > 0 and arr[r][c - 1]:
+                continue
+            if _ladder_random.random() < _LADDER_RUNG_PROB:
+                arr[r][c] = True
+    return arr
+
+
+def _trace_ladder(rungs, start_col, n_cols):
+    """사다리 경로 추적 → 도착 열 반환."""
+    col = start_col
+    for r in range(_LADDER_ROWS):
+        if col > 0 and rungs[r][col - 1]:
+            col -= 1
+        elif col < n_cols - 1 and rungs[r][col]:
+            col += 1
+    return col
+
+
+@login_required
+def ladder_list(request):
+    """진행 중인 사다리 게임 목록 (운영사무국 공유)."""
+    if _require_operations(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    games = LadderGame.objects.filter(is_active=True).select_related('created_by')[:20]
+    return JsonResponse({
+        'ok': True,
+        'games': [_serialize_ladder(g) for g in games],
+    })
+
+
+@login_required
+def ladder_detail(request, pk):
+    """특정 사다리 게임 상태 (폴링용)."""
+    if _require_operations(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    g = get_object_or_404(LadderGame, pk=pk)
+    return JsonResponse({'ok': True, 'game': _serialize_ladder(g)})
+
+
+@login_required
+def ladder_create(request):
+    """사다리 게임 생성."""
+    if _require_operations(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'method'}, status=400)
+
+    try:
+        body = _ladder_json.loads(request.body.decode('utf-8') or '{}')
+    except _ladder_json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'error': '잘못된 요청 형식입니다.'}, status=400)
+
+    title   = (body.get('title') or '').strip()[:100]
+    players = [str(p).strip() for p in (body.get('players') or []) if str(p).strip()]
+    results = [str(r).strip() for r in (body.get('results') or []) if str(r).strip()]
+
+    if len(players) < 2:
+        return JsonResponse({'ok': False, 'error': '참가자는 최소 2명 이상이어야 합니다.'}, status=400)
+    if len(players) > 15:
+        return JsonResponse({'ok': False, 'error': '참가자는 최대 15명까지 가능합니다.'}, status=400)
+    if len(players) != len(results):
+        return JsonResponse({'ok': False, 'error': '참가자 수와 결과 수가 같아야 합니다.'}, status=400)
+
+    g = LadderGame.objects.create(
+        title=title,
+        players=players,
+        results=results,
+        rungs=_build_rungs(len(players)),
+        revealed={},
+        created_by=request.user,
+        is_active=True,
+    )
+    return JsonResponse({'ok': True, 'game': _serialize_ladder(g)})
+
+
+@login_required
+def ladder_reveal(request, pk):
+    """특정 참가자의 사다리 결과 공개. 동기화 위해 서버에서 trace 계산."""
+    if _require_operations(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'method'}, status=400)
+    g = get_object_or_404(LadderGame, pk=pk, is_active=True)
+
+    try:
+        col = int(request.POST.get('col', '-1'))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': '잘못된 위치입니다.'}, status=400)
+    n = len(g.players)
+    if col < 0 or col >= n:
+        return JsonResponse({'ok': False, 'error': '잘못된 위치입니다.'}, status=400)
+
+    revealed = dict(g.revealed)
+    key = str(col)
+    if key in revealed:
+        # 이미 공개됨 — 그대로 반환
+        return JsonResponse({'ok': True, 'col': col, 'end_col': revealed[key], 'game': _serialize_ladder(g)})
+
+    end_col = _trace_ladder(g.rungs, col, n)
+    revealed[key] = end_col
+    g.revealed = revealed
+    g.save(update_fields=['revealed', 'updated_at'])
+    return JsonResponse({'ok': True, 'col': col, 'end_col': end_col, 'game': _serialize_ladder(g)})
+
+
+@login_required
+def ladder_close(request, pk):
+    """사다리 게임 종료 — 생성자 또는 관리자만 가능."""
+    if _require_operations(request):
+        return JsonResponse({'ok': False, 'error': 'forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'method'}, status=400)
+    g = get_object_or_404(LadderGame, pk=pk)
+    if g.created_by_id != request.user.pk and request.user.role != 'manager':
+        return JsonResponse({'ok': False, 'error': '게임 종료 권한이 없습니다.'}, status=403)
+    g.is_active = False
+    g.save(update_fields=['is_active', 'updated_at'])
+    return JsonResponse({'ok': True})

@@ -340,6 +340,34 @@ class VacationRequest(models.Model):
         return f'{self.user} {self.start_date}~{self.end_date} {self.get_leave_type_display()} ({self.get_status_display()})'
 
 
+class LadderGame(models.Model):
+    """사다리 타기 게임 — 운영사무국 전체 공유"""
+    title       = models.CharField(max_length=100, blank=True, verbose_name='제목')
+    players     = models.JSONField(default=list, verbose_name='참가자')
+    results     = models.JSONField(default=list, verbose_name='결과')
+    rungs       = models.JSONField(default=list, verbose_name='가로줄(ROWS x N-1)')
+    revealed    = models.JSONField(default=dict, verbose_name='공개된 결과 {start_col: end_col}')
+    created_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='created_ladder_games',
+        verbose_name='생성자',
+    )
+    is_active   = models.BooleanField(default=True, verbose_name='진행중')
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = '사다리 게임'
+        verbose_name_plural = '사다리 게임 목록'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title or "사다리"} ({self.created_at:%m-%d %H:%M})'
+
+    def is_fully_revealed(self):
+        return len(self.revealed) >= len(self.players)
+
+
 class DutyShift(models.Model):
     """당직 근무 — 관리자가 등록·편집"""
     user = models.ForeignKey(

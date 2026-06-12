@@ -36,6 +36,12 @@ urlpatterns = [
     path('duty/admin/', views.duty_admin_list, name='duty_admin_list'),
     path('duty/create/', views.duty_create, name='duty_create'),
     path('duty/<int:pk>/delete/', views.duty_delete, name='duty_delete'),
+    # 사다리 타기 (운영사무국 공유)
+    path('ladder/list/', views.ladder_list, name='ladder_list'),
+    path('ladder/create/', views.ladder_create, name='ladder_create'),
+    path('ladder/<int:pk>/', views.ladder_detail, name='ladder_detail'),
+    path('ladder/<int:pk>/reveal/', views.ladder_reveal, name='ladder_reveal'),
+    path('ladder/<int:pk>/close/', views.ladder_close, name='ladder_close'),
     # 용산어린이정원 일일보고
     path('integrated/', views.IntegratedDailyReportView.as_view(), name='integrated_daily'),
     path('integrated/pdf/', views.integrated_daily_pdf, name='integrated_daily_pdf'),

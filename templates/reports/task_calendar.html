@@ -38,6 +38,10 @@
             <i class="bi bi-list-check"></i> 내 휴가 내역
         </a>
         {% endif %}
+        <button type="button" class="btn btn-sm btn-outline-warning"
+                data-bs-toggle="modal" data-bs-target="#ladderModal">
+            🎲 사다리 타기
+        </button>
         <a href="{% url 'reports:integrated_daily' %}" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-file-earmark-text"></i> 용산어린이정원 일일보고
         </a>
@@ -171,6 +175,91 @@
 </div>
 {% endif %}
 
+<!-- 사다리 타기 모달 -->
+<div class="modal fade" id="ladderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">🎲 사다리 타기</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 게임 목록 단계 -->
+                <div id="ladderListStep">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold small">진행 중인 사다리</span>
+                        <button type="button" class="btn btn-sm btn-warning" id="ladderNewBtn">
+                            <i class="bi bi-plus-lg"></i> 새 게임
+                        </button>
+                    </div>
+                    <div id="ladderListBox">
+                        <p class="small text-muted mb-0 py-3 text-center">불러오는 중…</p>
+                    </div>
+                </div>
+
+                <!-- 입력 단계 -->
+                <div id="ladderInputStep" class="d-none">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold mb-1">제목 (선택)</label>
+                        <input type="text" id="ladderTitle" class="form-control form-control-sm"
+                               maxlength="100" placeholder="예: 점심 메뉴 정하기">
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold mb-1">참가자 (한 줄에 한 명)</label>
+                            <textarea id="ladderPlayers" class="form-control form-control-sm"
+                                      rows="6" placeholder="홍길동&#10;김철수&#10;이영희"></textarea>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold mb-1">결과 (한 줄에 하나)</label>
+                            <textarea id="ladderResults" class="form-control form-control-sm"
+                                      rows="6" placeholder="당첨&#10;꽝&#10;꽝"></textarea>
+                        </div>
+                    </div>
+                    <div id="ladderInputError" class="alert alert-danger py-2 small d-none"></div>
+                    <div class="d-flex gap-2 justify-content-between">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="ladderBackToListBtn">
+                            <i class="bi bi-arrow-left"></i> 목록
+                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="ladderClearBtn">
+                                <i class="bi bi-x-lg"></i> 비우기
+                            </button>
+                            <button type="button" class="btn btn-sm btn-warning" id="ladderStartBtn">
+                                <i class="bi bi-play-fill"></i> 사다리 생성 후 공유
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 게임 단계 -->
+                <div id="ladderGameStep" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
+                        <div>
+                            <span id="ladderGameTitle" class="fw-bold"></span>
+                            <span id="ladderGameMeta" class="text-muted small ms-2"></span>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="ladderBackToListBtn2">
+                                <i class="bi bi-arrow-left"></i> 목록
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger d-none" id="ladderCloseGameBtn">
+                                <i class="bi bi-trash"></i> 게임 종료
+                            </button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <i class="bi bi-broadcast"></i> 실시간 공유 — 다른 사람이 공개한 결과도 표시됩니다.
+                    </div>
+                    <div class="ladder-svg-wrap">
+                        <svg id="ladderSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 업무 목록 모달 -->
 <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
@@ -279,6 +368,39 @@
 .special-card.vacation-card { background: #d1e7dd; color: #0a3622; border: 1px solid #a3cfbb; }
 .special-card.duty-card     { background: #e8eaf6; color: #283593; border: 1px solid #c5cae9; }
 .special-icon { font-size: 1rem; }
+
+/* 사다리 타기 */
+.ladder-svg-wrap {
+    background: #fffdf6;
+    border: 1px solid #f0e6c8;
+    border-radius: 8px;
+    padding: 10px;
+    overflow-x: auto;
+}
+#ladderSvg { display: block; min-width: 100%; }
+#ladderSvg .ladder-pole       { stroke: #d6b75a; stroke-width: 2; }
+#ladderSvg .ladder-rung       { stroke: #d6b75a; stroke-width: 2; }
+#ladderSvg .player-rect       {
+    fill: #fff8e1; stroke: #e0c25c; stroke-width: 1.5;
+    cursor: pointer; transition: fill .12s;
+}
+#ladderSvg .player-rect:hover { fill: #ffeaa6; }
+#ladderSvg .player-rect.used  { fill: #d6d6d6; cursor: default; }
+#ladderSvg .result-rect       {
+    fill: #e3f2fd; stroke: #4a90e2; stroke-width: 1.5;
+}
+#ladderSvg .result-rect.revealed-hit { fill: #c8e6c9; stroke: #2e7d32; }
+#ladderSvg .player-text, #ladderSvg .result-text {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    font-size: 13px;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+    font-weight: 600;
+    fill: #333;
+}
+#ladderSvg .result-text.hidden { fill: transparent; }
+#ladderSvg .trace-path { fill: none; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
 </style>
 
 {% endblock %}
@@ -965,6 +1087,408 @@ document.getElementById('clearMyEmoji')?.addEventListener('click', () => {
     saveUserEmoji('');
     bootstrap.Dropdown.getInstance(document.getElementById('myEmojiDropdown'))?.hide();
 });
+
+// ── 사다리 타기 (서버 공유) ───────────────────────────────
+(function setupLadderGame() {
+    const modalEl    = document.getElementById('ladderModal');
+    const listStep   = document.getElementById('ladderListStep');
+    const inputStep  = document.getElementById('ladderInputStep');
+    const gameStep   = document.getElementById('ladderGameStep');
+    const listBox    = document.getElementById('ladderListBox');
+    const titleEl    = document.getElementById('ladderTitle');
+    const playersTa  = document.getElementById('ladderPlayers');
+    const resultsTa  = document.getElementById('ladderResults');
+    const errorBox   = document.getElementById('ladderInputError');
+    const svg        = document.getElementById('ladderSvg');
+    const gameTitleEl = document.getElementById('ladderGameTitle');
+    const gameMetaEl  = document.getElementById('ladderGameMeta');
+    const closeGameBtn = document.getElementById('ladderCloseGameBtn');
+    const myUserId   = {% if request.user.is_authenticated %}{{ request.user.pk }}{% else %}null{% endif %};
+    const myIsManager = {% if request.user.role == 'manager' %}true{% else %}false{% endif %};
+
+    const COL_W   = 90;
+    const TOP_H   = 36;
+    const BOT_H   = 36;
+    const PAD_Y   = 14;
+    const ROW_GAP = 24;
+    const COLORS  = ['#e57373','#64b5f6','#81c784','#ba68c8','#ffb74d',
+                     '#4dd0e1','#f06292','#9575cd','#a1887f','#7986cb',
+                     '#aed581','#ff8a65','#4db6ac','#dce775','#fff176'];
+
+    let currentGame = null;            // 현재 보고 있는 게임
+    let pollTimer   = null;            // 폴링 setInterval
+    let animatedSet = new Set();       // 이미 애니메이션 끝낸 col 집합
+
+    function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.classList.remove('d-none');
+    }
+    function hideError() { errorBox.classList.add('d-none'); }
+
+    function parseLines(s) {
+        return s.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    }
+
+    function getCookie(name) {
+        const v = document.cookie.split('; ').find(r => r.startsWith(name + '='));
+        return v ? decodeURIComponent(v.split('=')[1]) : '';
+    }
+    const csrf = '{{ csrf_token }}' || getCookie('csrftoken');
+
+    // ── 단계 전환 ──
+    function showListStep() {
+        stopPolling();
+        currentGame = null;
+        listStep.classList.remove('d-none');
+        inputStep.classList.add('d-none');
+        gameStep.classList.add('d-none');
+        refreshList();
+    }
+    function showInputStep() {
+        stopPolling();
+        currentGame = null;
+        hideError();
+        listStep.classList.add('d-none');
+        inputStep.classList.remove('d-none');
+        gameStep.classList.add('d-none');
+    }
+    function showGameStep() {
+        listStep.classList.add('d-none');
+        inputStep.classList.add('d-none');
+        gameStep.classList.remove('d-none');
+    }
+
+    // ── 게임 목록 ──
+    function refreshList() {
+        listBox.innerHTML = '<p class="small text-muted mb-0 py-3 text-center">불러오는 중…</p>';
+        fetch("{% url 'reports:ladder_list' %}")
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) { listBox.innerHTML = '<p class="small text-danger">불러오기 실패</p>'; return; }
+                renderList(d.games);
+            })
+            .catch(() => { listBox.innerHTML = '<p class="small text-danger">서버 오류</p>'; });
+    }
+    function renderList(games) {
+        if (!games.length) {
+            listBox.innerHTML = '<p class="small text-muted mb-0 py-3 text-center">진행 중인 사다리가 없습니다. 새 게임을 만들어 보세요.</p>';
+            return;
+        }
+        let html = '<div class="list-group">';
+        games.forEach(g => {
+            const total = g.players.length;
+            const done  = Object.keys(g.revealed).length;
+            const title = g.title || `사다리 (${total}명)`;
+            html += `<button type="button" class="list-group-item list-group-item-action ladder-join" data-id="${g.id}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-semibold">${escHtml(title)}</div>
+                        <div class="small text-muted">${escHtml(g.created_by || '익명')} · ${total}명 · ${done}/${total} 공개</div>
+                    </div>
+                    <span class="badge bg-${done === total ? 'success' : 'warning text-dark'}">${done === total ? '완료' : '진행중'}</span>
+                </div>
+            </button>`;
+        });
+        html += '</div>';
+        listBox.innerHTML = html;
+        listBox.querySelectorAll('.ladder-join').forEach(btn => {
+            btn.addEventListener('click', () => joinGame(parseInt(btn.dataset.id, 10)));
+        });
+    }
+
+    // ── 좌표 계산 ──
+    function colX(col)  { return col * COL_W + COL_W / 2; }
+    function rowY(row, rowCount) { return TOP_H + PAD_Y + (row + 0.5) * ROW_GAP; }
+    function ladderTop() { return TOP_H + PAD_Y; }
+    function ladderBottom(rowCount) { return TOP_H + PAD_Y + rowCount * ROW_GAP; }
+
+    // ── 사다리 SVG 렌더 ──
+    function drawLadder(game) {
+        const n = game.players.length;
+        const rungs = game.rungs;
+        const ROWS = rungs.length;
+        const w = n * COL_W;
+        const h = TOP_H + PAD_Y * 2 + ROWS * ROW_GAP + BOT_H;
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        svg.setAttribute('width',  w);
+        svg.setAttribute('height', h);
+        svg.innerHTML = '';
+
+        // 참가자 박스
+        for (let c = 0; c < n; c++) {
+            const x = c * COL_W;
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('class', 'player-rect');
+            rect.setAttribute('x', x + 6);
+            rect.setAttribute('y', 4);
+            rect.setAttribute('width', COL_W - 12);
+            rect.setAttribute('height', TOP_H - 8);
+            rect.setAttribute('rx', 6);
+            rect.dataset.col = c;
+            rect.addEventListener('click', () => onPlayerClick(c));
+            svg.appendChild(rect);
+
+            const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            tx.setAttribute('class', 'player-text');
+            tx.setAttribute('x', colX(c));
+            tx.setAttribute('y', TOP_H / 2 + 5);
+            tx.textContent = game.players[c];
+            svg.appendChild(tx);
+        }
+
+        // 세로 막대
+        for (let c = 0; c < n; c++) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('class', 'ladder-pole');
+            line.setAttribute('x1', colX(c));
+            line.setAttribute('y1', ladderTop());
+            line.setAttribute('x2', colX(c));
+            line.setAttribute('y2', ladderBottom(ROWS));
+            svg.appendChild(line);
+        }
+
+        // 가로 막대
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < n - 1; c++) {
+                if (!rungs[r][c]) continue;
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('class', 'ladder-rung');
+                line.setAttribute('x1', colX(c));
+                line.setAttribute('y1', rowY(r));
+                line.setAttribute('x2', colX(c + 1));
+                line.setAttribute('y2', rowY(r));
+                svg.appendChild(line);
+            }
+        }
+
+        // 결과 박스
+        const by = ladderBottom(ROWS) + PAD_Y;
+        for (let c = 0; c < n; c++) {
+            const x = c * COL_W;
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('class', 'result-rect');
+            rect.setAttribute('x', x + 6);
+            rect.setAttribute('y', by);
+            rect.setAttribute('width', COL_W - 12);
+            rect.setAttribute('height', BOT_H - 8);
+            rect.setAttribute('rx', 6);
+            rect.dataset.col = c;
+            svg.appendChild(rect);
+
+            const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            tx.setAttribute('class', 'result-text hidden');
+            tx.setAttribute('x', colX(c));
+            tx.setAttribute('y', by + BOT_H / 2 - 4);
+            tx.dataset.col = c;
+            tx.textContent = game.results[c];
+            svg.appendChild(tx);
+        }
+    }
+
+    // col에서 출발한 사다리 경로 추적 → 경로 좌표 배열 반환
+    function tracePath(game, startCol) {
+        const pts = [];
+        const n = game.players.length;
+        const ROWS = game.rungs.length;
+        let col = startCol;
+        pts.push([colX(col), ladderTop()]);
+        for (let r = 0; r < ROWS; r++) {
+            pts.push([colX(col), rowY(r)]);
+            if (col > 0 && game.rungs[r][col - 1]) {
+                col -= 1;
+                pts.push([colX(col), rowY(r)]);
+            } else if (col < n - 1 && game.rungs[r][col]) {
+                col += 1;
+                pts.push([colX(col), rowY(r)]);
+            }
+        }
+        pts.push([colX(col), ladderBottom(ROWS)]);
+        return { endCol: col, pts };
+    }
+
+    function showReveal(startCol, endCol, animate) {
+        const color = COLORS[startCol % COLORS.length];
+        const playerRect = svg.querySelector(`.player-rect[data-col="${startCol}"]`);
+        if (playerRect) playerRect.classList.add('used');
+
+        const { pts } = tracePath(currentGame, startCol);
+        const d = 'M ' + pts.map(p => p.join(' ')).join(' L ');
+        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pathEl.setAttribute('class', 'trace-path');
+        pathEl.setAttribute('d', d);
+        pathEl.setAttribute('stroke', color);
+        svg.appendChild(pathEl);
+
+        function reveal() {
+            const resRect = svg.querySelector(`.result-rect[data-col="${endCol}"]`);
+            const resText = svg.querySelector(`.result-text[data-col="${endCol}"]`);
+            if (resRect) { resRect.classList.add('revealed-hit'); resRect.setAttribute('stroke', color); }
+            if (resText) resText.classList.remove('hidden');
+        }
+
+        if (animate) {
+            const total = pathEl.getTotalLength();
+            pathEl.style.strokeDasharray  = total;
+            pathEl.style.strokeDashoffset = total;
+            const dur = Math.min(1500, 80 * pts.length);
+            pathEl.style.transition = `stroke-dashoffset ${dur}ms ease`;
+            requestAnimationFrame(() => { pathEl.style.strokeDashoffset = 0; });
+            setTimeout(reveal, dur + 50);
+        } else {
+            reveal();
+        }
+        animatedSet.add(startCol);
+    }
+
+    function onPlayerClick(col) {
+        if (!currentGame) return;
+        if (animatedSet.has(col) || currentGame.revealed[String(col)] !== undefined) return;
+        // 서버에 공개 요청
+        const fd = new URLSearchParams({ col: col });
+        fetch(`/reports/ladder/${currentGame.id}/reveal/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: fd,
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) { alert(d.error || '공개 실패'); return; }
+            currentGame = d.game;
+            showReveal(d.col, d.end_col, true);
+        });
+    }
+
+    // ── 게임 참여 + 폴링 ──
+    function joinGame(id) {
+        fetch(`/reports/ladder/${id}/`)
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) { alert('게임을 불러올 수 없습니다.'); return; }
+                currentGame = d.game;
+                animatedSet = new Set();
+                renderGame();
+                showGameStep();
+                startPolling();
+            });
+    }
+
+    function renderGame() {
+        const g = currentGame;
+        gameTitleEl.textContent = g.title || `사다리 (${g.players.length}명)`;
+        const total = g.players.length;
+        const done  = Object.keys(g.revealed).length;
+        gameMetaEl.textContent = `${g.created_by || '익명'} · ${done}/${total} 공개`;
+        // 게임 종료 버튼 표시 여부
+        const canClose = (g.created_by_id === myUserId) || myIsManager;
+        closeGameBtn.classList.toggle('d-none', !canClose);
+
+        drawLadder(g);
+        // 이미 공개된 것들 즉시 표시 (애니메이션 없이)
+        animatedSet = new Set();
+        Object.keys(g.revealed).forEach(key => {
+            const startCol = parseInt(key, 10);
+            const endCol   = g.revealed[key];
+            showReveal(startCol, endCol, false);
+        });
+    }
+
+    function applyServerUpdate(newGame) {
+        if (!currentGame) return;
+        // 새로 공개된 컬럼만 추가 애니메이션
+        const oldRevealed = currentGame.revealed || {};
+        const newRevealed = newGame.revealed || {};
+        currentGame = newGame;
+        Object.keys(newRevealed).forEach(key => {
+            const startCol = parseInt(key, 10);
+            if (animatedSet.has(startCol)) return;
+            if (oldRevealed[key] !== undefined) {
+                // 이전부터 있었던 건 무애니
+                showReveal(startCol, newRevealed[key], false);
+            } else {
+                // 새로 공개 → 애니메이션
+                showReveal(startCol, newRevealed[key], true);
+            }
+        });
+        // 메타 갱신
+        const total = newGame.players.length;
+        const done  = Object.keys(newRevealed).length;
+        gameMetaEl.textContent = `${newGame.created_by || '익명'} · ${done}/${total} 공개`;
+    }
+
+    function startPolling() {
+        stopPolling();
+        pollTimer = setInterval(() => {
+            if (!currentGame) return;
+            fetch(`/reports/ladder/${currentGame.id}/`)
+                .then(r => r.json())
+                .then(d => { if (d.ok) applyServerUpdate(d.game); })
+                .catch(() => {});
+        }, 2000);
+    }
+    function stopPolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    // ── 새 게임 생성 ──
+    function createGame() {
+        hideError();
+        const p = parseLines(playersTa.value);
+        const r = parseLines(resultsTa.value);
+        const title = titleEl.value.trim();
+        if (p.length < 2)            return showError('참가자는 최소 2명 이상이어야 합니다.');
+        if (p.length > 15)           return showError('참가자는 최대 15명까지 가능합니다.');
+        if (r.length !== p.length)   return showError('참가자 수와 결과 수가 같아야 합니다.');
+
+        fetch("{% url 'reports:ladder_create' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, players: p, results: r }),
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) return showError(d.error || '생성 실패');
+            currentGame = d.game;
+            animatedSet = new Set();
+            renderGame();
+            showGameStep();
+            startPolling();
+        });
+    }
+
+    function closeCurrentGame() {
+        if (!currentGame) return;
+        if (!confirm('이 사다리 게임을 종료하시겠습니까?')) return;
+        fetch(`/reports/ladder/${currentGame.id}/close/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) { alert(d.error || '종료 실패'); return; }
+            showListStep();
+        });
+    }
+
+    // ── 이벤트 바인딩 ──
+    document.getElementById('ladderNewBtn').addEventListener('click', () => {
+        titleEl.value = '';
+        playersTa.value = '';
+        resultsTa.value = '';
+        showInputStep();
+    });
+    document.getElementById('ladderBackToListBtn').addEventListener('click', showListStep);
+    document.getElementById('ladderBackToListBtn2').addEventListener('click', showListStep);
+    document.getElementById('ladderStartBtn').addEventListener('click', createGame);
+    document.getElementById('ladderClearBtn').addEventListener('click', () => {
+        titleEl.value = ''; playersTa.value = ''; resultsTa.value = '';
+        hideError();
+    });
+    closeGameBtn.addEventListener('click', closeCurrentGame);
+
+    // 모달 열리면 목록부터 / 닫히면 폴링 정지
+    modalEl.addEventListener('shown.bs.modal',  showListStep);
+    modalEl.addEventListener('hidden.bs.modal', stopPolling);
+})();
 
 renderDots();
 
