@@ -850,7 +850,13 @@ function bindPanelEvents(dateStr) {
                 body: new URLSearchParams({ status: btn.dataset.status }),
             })
             .then(r => r.json())
-            .then(() => openModal(selectedDate));
+            .then(d => {
+                if (d && d.extended_days && d.extended_days > 0) {
+                    const newEnd = d.end_date ? d.end_date.replace(/-/g, '/').slice(5) : '';
+                    alert(`보류 ${d.extended_days}일 동안의 기간만큼 목표 완료일이 연장되었습니다.${newEnd ? `\n새 목표일: ${newEnd}` : ''}`);
+                }
+                openModal(selectedDate);
+            });
         });
     });
     document.querySelectorAll('.del-btn').forEach(btn => {

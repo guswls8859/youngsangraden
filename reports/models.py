@@ -78,6 +78,7 @@ class DailyTask(models.Model):
     task_name = models.CharField(max_length=300, verbose_name='업무명')
     progress = models.IntegerField(default=0, verbose_name='진행도(%)')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='doing', verbose_name='상태')
+    hold_started_at = models.DateField(null=True, blank=True, verbose_name='보류 시작일자')
     note = models.TextField(blank=True, verbose_name='비고')
     is_reviewed = models.BooleanField(default=False, verbose_name='검토 완료')
     reviewed_by = models.ForeignKey(

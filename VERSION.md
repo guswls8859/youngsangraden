@@ -4,6 +4,21 @@
 
 ---
 
+## [1.1.5] - 2026-06-09
+
+### 추가
+- **보류 → 재개 시 목표 완료일 자동 연장** ([reports/views.py:289](reports/views.py#L289))
+  - `DailyTask.hold_started_at` (DateField, nullable) 추가 — 보류 진입 시 오늘 날짜 기록
+  - 보류 상태에서 진행중/완료로 전환할 때 보류 일수만큼 `end_date`를 자동 연장하고 `hold_started_at`을 클리어
+  - 연장이 발생한 경우 클라이언트 alert로 사용자에게 안내 ("보류 N일 동안의 기간만큼 목표 완료일이 연장되었습니다")
+  - `end_date`가 없는 업무는 연장 대상 아님 (목표일이 없으므로 늘릴 게 없음)
+  - AJAX 응답에 `extended_days`, `end_date`, `hold_started_at` 포함
+
+### 마이그레이션
+- `reports/migrations/0018_dailytask_hold_started_at.py`
+
+---
+
 ## [1.1.4] - 2026-06-09
 
 ### 추가

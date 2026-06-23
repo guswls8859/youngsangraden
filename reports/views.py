@@ -288,7 +288,10 @@ def task_update_progress(request, pk):
 
 @login_required
 def task_update_status(request, pk):
-    """상태 변경 — AJAX/일반 모두 지원"""
+    """상태 변경 — AJAX/일반 모두 지원.
+    - 'hold'로 전환 시: 오늘 날짜를 hold_started_at에 기록
+    - 'hold'에서 다른 상태로 전환 시: 보류 기간만큼 end_date 연장, hold_started_at 클리어
+    """
     if _require_operations(request):
         return redirect('main_menu')
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -296,18 +299,53 @@ def task_update_status(request, pk):
     if request.method == 'POST':
         status = request.POST.get('status')
         if status in ('doing', 'hold', 'done'):
+            today = timezone.localdate()
+            prev_status = task.status
+            new_end_date  = task.end_date
+            new_hold_at   = task.hold_started_at
+            extended_days = 0
+
+            # 보류 → 다른 상태: 보류 일수만큼 end_date 연장
+            if prev_status == 'hold' and status != 'hold' and task.hold_started_at:
+                delta = (today - task.hold_started_at).days
+                if delta > 0 and task.end_date:
+                    new_end_date  = task.end_date + datetime.timedelta(days=delta)
+                    extended_days = delta
+                new_hold_at = None
+            # 다른 상태 → 보류 진입: 시작 시점 기록
+            elif status == 'hold' and prev_status != 'hold':
+                new_hold_at = today
+
             if status == 'done':
                 task.progress = 100
                 task.status = 'done'
+                task.hold_started_at = new_hold_at  # 보통 None
+                if new_end_date != task.end_date:
+                    task.end_date = new_end_date
                 task.save()  # save()가 completed_date 자동 처리
             else:
                 # 완료→진행중/보류 전환: save()의 progress==100 강제 잠금을 우회
-                update_fields = {'status': status, 'completed_date': None}
+                update_fields = {
+                    'status': status,
+                    'completed_date': None,
+                    'hold_started_at': new_hold_at,
+                    'end_date': new_end_date,
+                }
                 # 서브 업무 없이 100%인 경우 진행률도 초기화
                 if task.progress == 100 and not task.subtasks.exists():
                     update_fields['progress'] = 0
                 DailyTask.objects.filter(pk=task.pk).update(**update_fields)
                 task.refresh_from_db()
+
+            if is_ajax:
+                return JsonResponse({
+                    'ok': True, 'status': task.status,
+                    'status_display': task.get_status_display(),
+                    'progress': task.progress,
+                    'end_date': task.end_date.isoformat() if task.end_date else '',
+                    'hold_started_at': task.hold_started_at.isoformat() if task.hold_started_at else '',
+                    'extended_days': extended_days,
+                })
         if is_ajax:
             return JsonResponse({
                 'ok': True, 'status': task.status,
