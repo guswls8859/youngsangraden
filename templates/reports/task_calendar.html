@@ -695,8 +695,11 @@ function datesHtml(t) {
     const parts = [];
     // 등록일
     parts.push(`<span class="text-muted" style="font-size:.7rem">📅 등록 ${fmtDate(t.start_date)}</span>`);
-    // 목표완료일 + D-day
-    if (t.end_date) {
+    // 목표완료일 + D-day (보류 상태면 "보류중"으로 표기)
+    if (t.status === 'hold') {
+        const baseDate = t.end_date ? ` ${fmtDate(t.end_date)}` : '';
+        parts.push(`<span class="text-warning fw-semibold" style="font-size:.7rem" title="보류 해제 시 보류한 일수만큼 목표일이 연장됩니다">⏸ 보류중${baseDate}</span>`);
+    } else if (t.end_date) {
         const today = new Date(); today.setHours(0,0,0,0);
         const end = new Date(t.end_date); end.setHours(0,0,0,0);
         const diff = Math.round((end - today) / 86400000);
@@ -750,7 +753,7 @@ function renderMyTask(t) {
         ${progressHtml}
         <div class="subtask-section">${renderSubtaskList(t, true)}</div>
         <div class="mt-2 d-flex gap-1 justify-content-end flex-wrap">
-            ${t.status !== 'doing' ? `<button class="btn btn-outline-secondary btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="doing" style="font-size:.72rem">진행중</button>` : ''}
+            ${t.status !== 'doing' ? `<button class="btn btn-outline-secondary btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="doing" style="font-size:.72rem">${t.status === 'hold' ? '재개' : '진행중'}</button>` : ''}
             ${t.status !== 'hold'  ? `<button class="btn btn-outline-warning  btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="hold"  style="font-size:.72rem">보류</button>` : ''}
             ${t.status !== 'done'  ? `<button class="btn btn-outline-success  btn-sm py-0 status-btn" data-pk="${t.pk}" data-status="done"  style="font-size:.72rem">완료</button>` : ''}
             <button class="btn btn-outline-danger btn-sm py-0 del-btn" data-pk="${t.pk}" style="font-size:.72rem"><i class="bi bi-trash"></i></button>
