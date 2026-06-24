@@ -697,8 +697,7 @@ function datesHtml(t) {
     parts.push(`<span class="text-muted" style="font-size:.7rem">📅 등록 ${fmtDate(t.start_date)}</span>`);
     // 목표완료일 + D-day (보류 상태면 "보류중"으로 표기)
     if (t.status === 'hold') {
-        const baseDate = t.end_date ? ` ${fmtDate(t.end_date)}` : '';
-        parts.push(`<span class="text-warning fw-semibold" style="font-size:.7rem" title="보류 해제 시 보류한 일수만큼 목표일이 연장됩니다">⏸ 보류중${baseDate}</span>`);
+        parts.push(`<span class="text-muted" style="font-size:.7rem" title="보류 해제 시 보류한 일수만큼 목표일이 연장됩니다">⏸ 보류중</span>`);
     } else if (t.end_date) {
         const today = new Date(); today.setHours(0,0,0,0);
         const end = new Date(t.end_date); end.setHours(0,0,0,0);
