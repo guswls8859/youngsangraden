@@ -983,6 +983,23 @@ def task_weekly_pdf(request):
 
 # ── 용산어린이정원 일일보고 ────────────────────────────────────────
 
+def _normalize_event_cols(raw):
+    """internal/external event columns_json을 {headers, rows} 형식으로 통일.
+    기존 [{header, value}, ...] 형식도 자동 변환.
+    """
+    if not raw:
+        return {'headers': [], 'rows': []}
+    if isinstance(raw, dict) and 'headers' in raw:
+        headers = list(raw.get('headers') or [])
+        rows    = [list(r) for r in (raw.get('rows') or [])]
+        return {'headers': headers, 'rows': rows}
+    if isinstance(raw, list):
+        headers = [(c.get('header') or '') for c in raw if isinstance(c, dict)]
+        row     = [(c.get('value')  or '') for c in raw if isinstance(c, dict)]
+        return {'headers': headers, 'rows': [row] if any(v for v in row) else []}
+    return {'headers': [], 'rows': []}
+
+
 class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
     """날짜별 운영데이터 입력 + 미리보기 페이지"""
     template_name = 'reports/integrated_daily.html'
@@ -1016,11 +1033,11 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
         # 행사 + 작업사진 (카테고리별 분리)
         if ops:
             ctx['internal_events'] = [
-                {'name': ev.name, 'columns': ev.columns_json or []}
+                {'name': ev.name, **_normalize_event_cols(ev.columns_json)}
                 for ev in ops.internal_events.all().order_by('order')
             ]
             ctx['external_events'] = [
-                {'name': ev.name, 'columns': ev.columns_json or []}
+                {'name': ev.name, **_normalize_event_cols(ev.columns_json)}
                 for ev in ops.external_events.all().order_by('order')
             ]
             all_photos = list(ops.work_photos.all().order_by('order'))
@@ -1099,11 +1116,23 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
             related_mgr.all().delete()
             for idx, ev in enumerate(items):
                 name = (ev.get('name') or '').strip()
-                cols = ev.get('columns') or []
-                if not name and not cols:
+                # 신규 형식 우선, 없으면 구식 columns에서 변환
+                if 'headers' in ev or 'rows' in ev:
+                    headers = [str(h or '').strip() for h in (ev.get('headers') or [])]
+                    rows    = [[str(v or '').strip() for v in row]
+                               for row in (ev.get('rows') or [])]
+                else:
+                    legacy_cols = ev.get('columns') or []
+                    headers = [str(c.get('header') or '').strip() for c in legacy_cols]
+                    row     = [str(c.get('value')  or '').strip() for c in legacy_cols]
+                    rows    = [row] if any(row) else []
+                # 빈 행사 스킵
+                if not name and not headers and not rows:
                     continue
                 model.objects.create(
-                    ops=ops, name=name, columns_json=cols, order=idx,
+                    ops=ops, name=name,
+                    columns_json={'headers': headers, 'rows': rows},
+                    order=idx,
                 )
 
         _replace_events(InternalEvent, ops.internal_events, 'internal_events_json')

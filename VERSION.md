@@ -4,6 +4,30 @@
 
 ---
 
+## [1.1.7] - 2026-06-09
+
+### 추가
+- **작업사진 자동 압축 (클라이언트)** ([templates/reports/integrated_daily.html](templates/reports/integrated_daily.html))
+  - 일일보고 작업사진 업로드 시 Canvas API로 즉시 리사이즈 + JPEG 재인코딩
+  - 긴 변 최대 1600px, JPEG 품질 0.82, 600KB 미만은 압축 생략 (GIF 제외)
+  - 압축 결과가 원본보다 커지면 원본 사용 (안전 장치)
+  - 콘솔에 압축 결과 로그 출력
+- **내부/외부 행사 — 행(row) 추가 기능** ([templates/reports/integrated_daily.html](templates/reports/integrated_daily.html))
+  - 기존: 행사마다 헤더+값 1행 / 변경: 헤더 1행 + 데이터 N행
+  - 각 행사 카드에 "행 추가" 버튼, 행 끝에 X로 개별 삭제
+  - "컬럼 추가" 클릭 시 빈 첫 행 자동 생성
+
+### 변경
+- **행사 데이터 구조 변경** — `columns_json` 신구 형식 호환
+  - 신규: `{headers: [...], rows: [[...], [...]]}`
+  - 기존: `[{header, value}, ...]`도 읽을 때 자동 변환 (마이그레이션 불필요)
+- **HWPX 출력** ([reports/hwpx_report.py](reports/hwpx_report.py))
+  - `_make_event_blocks()`가 헤더 행 + 데이터 N행 동적 생성
+  - 템플릿 데이터 행을 deepcopy해 행마다 추가, `cellAddr.rowAddr`/`tbl.rowCnt` 자동 갱신
+- **저장 로직** ([reports/views.py](reports/views.py)) — `_replace_events()`가 신구 JSON 모두 수용, 항상 신규 구조로 저장
+
+---
+
 ## [1.1.6] - 2026-06-09
 
 ### 변경

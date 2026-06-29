@@ -657,49 +657,109 @@
                     const hidden  = document.getElementById(hiddenId);
                     const initRaw = document.getElementById(initId)?.textContent || '[]';
                     let events = [];
+
+                    // 구식 [{header, value}] / 신식 {headers, rows} 둘 다 처리
+                    function normalize(ev) {
+                        if (ev && Array.isArray(ev.headers)) {
+                            return {
+                                name: ev.name || '',
+                                headers: ev.headers.slice(),
+                                rows: (ev.rows || []).map(r => r.slice()),
+                            };
+                        }
+                        if (ev && Array.isArray(ev.columns)) {
+                            const headers = ev.columns.map(c => c.header || '');
+                            const row     = ev.columns.map(c => c.value  || '');
+                            return {
+                                name: ev.name || '',
+                                headers,
+                                rows: row.some(v => v) ? [row] : [],
+                            };
+                        }
+                        return { name: '', headers: [], rows: [] };
+                    }
+
                     try {
                         const parsed = JSON.parse(initRaw);
-                        events = Array.isArray(parsed) ? parsed.map(ev => ({
-                            name: ev.name || '', columns: ev.columns || [],
-                        })) : [];
+                        events = Array.isArray(parsed) ? parsed.map(normalize) : [];
                     } catch(e) { events = []; }
 
+                    function ensureRectangular(ev) {
+                        // headers 개수에 맞춰 각 row 길이 보정
+                        const w = ev.headers.length;
+                        ev.rows = ev.rows.map(r => {
+                            const copy = r.slice(0, w);
+                            while (copy.length < w) copy.push('');
+                            return copy;
+                        });
+                    }
+
                     function sync(){ hidden.value = JSON.stringify(events); }
+
                     function render(){
                         listEl.innerHTML = '';
                         events.forEach((ev, i) => {
-                            const cols = ev.columns || [];
+                            ensureRectangular(ev);
+                            const headers = ev.headers || [];
+                            const rows    = ev.rows    || [];
+
+                            // 헤더 행
                             let headerCells = '';
-                            let valueCells  = '';
-                            cols.forEach((c, j) => {
+                            headers.forEach((h, j) => {
                                 headerCells += `
                                     <th class="p-1 align-middle" style="min-width:120px; background:#f1f3f5;">
                                         <div class="position-relative">
                                             <input type="text" class="form-control form-control-sm col-header-input"
                                                    placeholder="헤더"
-                                                   value="${escapeHtml(c.header || '')}"
-                                                   oninput="EVENT_CTRL.${kind}.updateCol(${i}, ${j}, 'header', this.value)">
+                                                   value="${escapeHtml(h)}"
+                                                   oninput="EVENT_CTRL.${kind}.updateHeader(${i}, ${j}, this.value)">
                                             <button type="button" class="col-header-x"
                                                     title="컬럼 삭제"
                                                     onclick="EVENT_CTRL.${kind}.removeCol(${i}, ${j})">×</button>
                                         </div>
                                     </th>`;
-                                valueCells += `
-                                    <td class="p-1 align-middle">
-                                        <input type="text" class="form-control form-control-sm"
-                                               placeholder="값"
-                                               value="${escapeHtml(c.value || '')}"
-                                               oninput="EVENT_CTRL.${kind}.updateCol(${i}, ${j}, 'value', this.value)">
-                                    </td>`;
                             });
-                            const tableHtml = cols.length ? `
-                                <div class="table-responsive">
-                                    <table class="table table-bordered mb-2" style="font-size:.85rem;">
-                                        <thead><tr>${headerCells}</tr></thead>
-                                        <tbody><tr>${valueCells}</tr></tbody>
-                                    </table>
-                                </div>` : `
-                                <div class="form-text small mb-2 text-muted">컬럼이 없습니다. "컬럼 추가"로 시작하세요.</div>`;
+                            // 행 삭제 버튼 열 헤더 (빈 셀)
+                            if (headers.length && rows.length) {
+                                headerCells += '<th style="width:32px; background:#f1f3f5;"></th>';
+                            }
+
+                            // 데이터 행들
+                            let bodyHtml = '';
+                            rows.forEach((row, r) => {
+                                let cells = '';
+                                row.forEach((v, j) => {
+                                    cells += `
+                                        <td class="p-1 align-middle">
+                                            <input type="text" class="form-control form-control-sm"
+                                                   placeholder="값"
+                                                   value="${escapeHtml(v)}"
+                                                   oninput="EVENT_CTRL.${kind}.updateCell(${i}, ${r}, ${j}, this.value)">
+                                        </td>`;
+                                });
+                                cells += `
+                                    <td class="p-1 align-middle text-center" style="width:32px;">
+                                        <button type="button" class="btn btn-sm btn-link text-danger p-0"
+                                                title="행 삭제"
+                                                onclick="EVENT_CTRL.${kind}.removeRow(${i}, ${r})">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </td>`;
+                                bodyHtml += `<tr>${cells}</tr>`;
+                            });
+
+                            let tableHtml;
+                            if (!headers.length) {
+                                tableHtml = `<div class="form-text small mb-2 text-muted">컬럼이 없습니다. "컬럼 추가"로 시작하세요.</div>`;
+                            } else {
+                                tableHtml = `
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered mb-2" style="font-size:.85rem;">
+                                            <thead><tr>${headerCells}</tr></thead>
+                                            <tbody>${bodyHtml || ''}</tbody>
+                                        </table>
+                                    </div>`;
+                            }
 
                             const card = document.createElement('div');
                             card.className = 'border rounded p-2 bg-white';
@@ -714,22 +774,59 @@
                                             onclick="EVENT_CTRL.${kind}.remove(${i})">✕</button>
                                 </div>
                                 ${tableHtml}
-                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                        onclick="EVENT_CTRL.${kind}.addCol(${i})">
-                                    <i class="bi bi-plus"></i> 컬럼 추가
-                                </button>`;
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            onclick="EVENT_CTRL.${kind}.addCol(${i})">
+                                        <i class="bi bi-plus"></i> 컬럼 추가
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            onclick="EVENT_CTRL.${kind}.addRow(${i})"
+                                            ${headers.length === 0 ? 'disabled' : ''}>
+                                        <i class="bi bi-plus-lg"></i> 행 추가
+                                    </button>
+                                </div>`;
                             listEl.appendChild(card);
                         });
                         sync();
                     }
                     return {
-                        add:        () => { events.push({name:'', columns:[]}); render(); },
+                        add:        () => { events.push({name:'', headers:[], rows:[]}); render(); },
                         remove:     i => { events.splice(i, 1); render(); },
                         updateName: (i, v) => { events[i].name = v; sync(); },
-                        addCol:     i => { events[i].columns.push({header:'', value:''}); render(); },
-                        removeCol:  (i, j) => { events[i].columns.splice(j, 1); render(); },
-                        updateCol:  (i, j, k, v) => { events[i].columns[j][k] = v; sync(); },
-                        _render:    render,
+                        addCol: i => {
+                            events[i].headers.push('');
+                            // 컬럼 추가 시 기존 행에 빈 셀 추가, 행이 하나도 없으면 첫 행 자동 생성
+                            if (events[i].rows.length === 0) {
+                                events[i].rows.push(new Array(events[i].headers.length).fill(''));
+                            } else {
+                                events[i].rows.forEach(r => r.push(''));
+                            }
+                            render();
+                        },
+                        removeCol: (i, j) => {
+                            events[i].headers.splice(j, 1);
+                            events[i].rows.forEach(r => r.splice(j, 1));
+                            // 모든 컬럼 삭제됐으면 빈 행도 제거
+                            if (events[i].headers.length === 0) events[i].rows = [];
+                            render();
+                        },
+                        updateHeader: (i, j, v) => { events[i].headers[j] = v; sync(); },
+                        addRow: i => {
+                            const w = events[i].headers.length;
+                            if (!w) return;
+                            events[i].rows.push(new Array(w).fill(''));
+                            render();
+                        },
+                        removeRow: (i, r) => {
+                            events[i].rows.splice(r, 1);
+                            render();
+                        },
+                        updateCell: (i, r, j, v) => {
+                            if (!events[i].rows[r]) events[i].rows[r] = [];
+                            events[i].rows[r][j] = v;
+                            sync();
+                        },
+                        _render: render,
                     };
                 }
                 window.EVENT_CTRL = {
@@ -803,6 +900,99 @@
                 alert('변경된 내용이 있습니다. 저장 버튼을 먼저 눌러주세요.');
             }
         });
+    });
+})();
+</script>
+
+<script>
+/* ── 작업사진 자동 압축 ───────────────────────────────────
+   파일 선택 시 클라이언트에서 리사이즈 + JPEG 재인코딩으로 용량 축소.
+   - 가로/세로 중 긴 변을 MAX_EDGE px로 제한 (확대는 안 함)
+   - JPEG 품질 0.82
+   - 원본이 이미 작으면 그대로 사용
+*/
+(function setupImageCompress() {
+    const MAX_EDGE = 1600;
+    const QUALITY  = 0.82;
+    const SKIP_BYTES = 600 * 1024;  // 600KB 미만은 압축 생략
+
+    function loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+            img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+            img.src = url;
+        });
+    }
+
+    function canvasToBlob(canvas, type, quality) {
+        return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+    }
+
+    async function compressOne(file) {
+        if (!file.type.startsWith('image/')) return file;
+        if (file.type === 'image/gif')      return file;          // 애니메이션 보존
+        if (file.size <= SKIP_BYTES)        return file;
+
+        try {
+            const img = await loadImage(file);
+            const longest = Math.max(img.width, img.height);
+            const scale   = longest > MAX_EDGE ? MAX_EDGE / longest : 1;
+            const w = Math.round(img.width * scale);
+            const h = Math.round(img.height * scale);
+
+            const canvas = document.createElement('canvas');
+            canvas.width  = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const blob = await canvasToBlob(canvas, 'image/jpeg', QUALITY);
+            if (!blob || blob.size >= file.size) return file;  // 더 커지면 원본 사용
+
+            // 원본 파일명 확장자 → .jpg로 교체
+            const newName = file.name.replace(/\.(png|jpe?g|webp|heic|heif|bmp|tiff?)$/i, '') + '.jpg';
+            return new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
+        } catch (e) {
+            console.warn('이미지 압축 실패, 원본 업로드:', e);
+            return file;
+        }
+    }
+
+    // input.files는 read-only. DataTransfer로 새 FileList 구성해서 교체.
+    async function handleChange(input) {
+        if (!input.files || input.files.length === 0) return;
+        const original = Array.from(input.files);
+        // 진행 표시 (간단한 placeholder text)
+        const prevTitle = input.title || '';
+        input.title = '이미지 압축 중...';
+        input.disabled = true;
+
+        const compressed = await Promise.all(original.map(f => compressOne(f)));
+
+        const dt = new DataTransfer();
+        compressed.forEach(f => dt.items.add(f));
+        input.files = dt.files;
+
+        input.disabled = false;
+        input.title = prevTitle;
+
+        // 압축 결과 콘솔 표시 (디버깅)
+        const before = original.reduce((s, f) => s + f.size, 0);
+        const after  = compressed.reduce((s, f) => s + f.size, 0);
+        if (before > 0) {
+            const pct = Math.round((1 - after / before) * 100);
+            console.log(`[이미지 압축] ${original.length}장: ${(before/1024).toFixed(0)}KB → ${(after/1024).toFixed(0)}KB (${pct}% 절감)`);
+        }
+    }
+
+    document.querySelectorAll(
+        'input[type=file][name="work_photos_interior"],'
+      + 'input[type=file][name="work_photos_outdoor"],'
+      + 'input[type=file][name="work_photos_fountain"]'
+    ).forEach(input => {
+        input.addEventListener('change', () => handleChange(input));
     });
 })();
 </script>

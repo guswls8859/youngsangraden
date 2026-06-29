@@ -216,17 +216,30 @@ def _make_event_blocks(events):
     if not events or _EV_NAME_TPL is None:
         return blocks
 
+    def _normalize_cols(cols_raw):
+        """[{header, value}] 또는 {headers, rows} 형식을 (headers, rows)로 통일."""
+        if isinstance(cols_raw, dict) and 'headers' in cols_raw:
+            return (
+                list(cols_raw.get('headers') or []),
+                [list(r) for r in (cols_raw.get('rows') or [])],
+            )
+        if isinstance(cols_raw, list):
+            headers = [(c.get('header') or '') for c in cols_raw if isinstance(c, dict)]
+            row     = [(c.get('value')  or '') for c in cols_raw if isinstance(c, dict)]
+            return headers, ([row] if any(row) else [])
+        return [], []
+
     for ev in events:
         # 1) 이름 단락
         name_para = deepcopy(_EV_NAME_TPL)
         _set_para_text(name_para, f'○ {ev.name}')
         blocks.append(name_para)
 
-        cols = ev.columns_json or []
-        if not cols:
+        headers, data_rows = _normalize_cols(ev.columns_json)
+        if not headers:
             continue
 
-        # 2) 표 단락 (4열 템플릿 → 사용자 컬럼 수에 맞춰 조정)
+        # 2) 표 단락 (템플릿 → 헤더 N열 + 데이터 M행 동적 생성)
         body_para = deepcopy(_EV_BODY_TPL)
         run = body_para.find('hp:run', NS)
         tbl = run.find('hp:tbl', NS) if run is not None else None
@@ -234,50 +247,71 @@ def _make_event_blocks(events):
             blocks.append(body_para)
             continue
 
-        rows = tbl.findall('hp:tr', NS)
-        if len(rows) < 2:
+        tr_list = tbl.findall('hp:tr', NS)
+        if len(tr_list) < 2:
             blocks.append(body_para)
             continue
-        header_row, data_row = rows[0], rows[1]
-        tpl_header_cell = header_row.findall('hp:tc', NS)[0]
-        tpl_data_cell   = data_row.findall('hp:tc', NS)[0]
+        header_tr, data_tr_tpl = tr_list[0], tr_list[1]
+        tpl_header_cell = header_tr.findall('hp:tc', NS)[0]
+        tpl_data_cell   = data_tr_tpl.findall('hp:tc', NS)[0]
 
-        # 기존 셀 모두 제거
-        for tc in header_row.findall('hp:tc', NS):
-            header_row.remove(tc)
-        for tc in data_row.findall('hp:tc', NS):
-            data_row.remove(tc)
+        # 기존 데이터 행들(2번째 이후) + 헤더/첫데이터 행의 셀 모두 제거
+        for tr in tr_list[2:]:
+            tbl.remove(tr)
+        for tc in header_tr.findall('hp:tc', NS):
+            header_tr.remove(tc)
+        for tc in data_tr_tpl.findall('hp:tc', NS):
+            data_tr_tpl.remove(tc)
 
-        # 새 셀 추가
-        N         = len(cols)
-        total_w   = int(tbl.get('cellSpacing', '0'))  # not the right one; we'll use sz
-        sz_el     = tbl.find('hp:sz', NS)
-        total_w   = int(sz_el.get('width')) if sz_el is not None else 36056
-        cell_w    = total_w // N
+        N       = len(headers)
+        sz_el   = tbl.find('hp:sz', NS)
+        total_w = int(sz_el.get('width')) if sz_el is not None else 36056
+        cell_w  = total_w // N
 
-        def _make_cell(template_cell, col_addr, text, width):
-            from copy import deepcopy
+        def _make_cell(template_cell, row_addr, col_addr, text, width):
             new_tc = deepcopy(template_cell)
-            # cellAddr
             ca = new_tc.find('hp:cellAddr', NS)
             if ca is not None:
                 ca.set('colAddr', str(col_addr))
-            # cellSz width
+                ca.set('rowAddr', str(row_addr))
             cs = new_tc.find('hp:cellSz', NS)
             if cs is not None:
                 cs.set('width', str(width))
-            # text
             sub_p = new_tc.find('hp:subList/hp:p', NS)
             if sub_p is not None:
                 _set_para_text(sub_p, text)
             return new_tc
 
-        for i, col in enumerate(cols):
-            header_row.append(_make_cell(tpl_header_cell, i, (col.get('header') or '').strip(), cell_w))
-            data_row.append  (_make_cell(tpl_data_cell,   i, (col.get('value')  or '').strip(), cell_w))
+        # 헤더 행 채우기
+        for i, h in enumerate(headers):
+            header_tr.append(_make_cell(tpl_header_cell, 0, i, str(h or '').strip(), cell_w))
 
-        # colCnt 갱신
+        # 데이터 행: 최소 1개 (빈 행이라도)
+        rows_to_render = data_rows if data_rows else [[''] * N]
+
+        # 첫 데이터 행 → data_tr_tpl에 채움
+        first_row = rows_to_render[0]
+        for i in range(N):
+            v = first_row[i] if i < len(first_row) else ''
+            data_tr_tpl.append(_make_cell(tpl_data_cell, 1, i, str(v).strip(), cell_w))
+
+        # 추가 데이터 행 → data_tr_tpl 복사해서 tbl에 append
+        for r_idx, row in enumerate(rows_to_render[1:], start=2):
+            new_tr = deepcopy(data_tr_tpl)
+            new_cells = new_tr.findall('hp:tc', NS)
+            for j, cell in enumerate(new_cells):
+                v = row[j] if j < len(row) else ''
+                sub_p = cell.find('hp:subList/hp:p', NS)
+                if sub_p is not None:
+                    _set_para_text(sub_p, str(v).strip())
+                ca = cell.find('hp:cellAddr', NS)
+                if ca is not None:
+                    ca.set('rowAddr', str(r_idx))
+            tbl.append(new_tr)
+
+        # colCnt / rowCnt 갱신
         tbl.set('colCnt', str(N))
+        tbl.set('rowCnt', str(1 + len(rows_to_render)))
 
         blocks.append(body_para)
 
