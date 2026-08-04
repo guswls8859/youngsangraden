@@ -66,7 +66,7 @@ class FacilityWorkPhotoInline(admin.TabularInline):
 
 @admin.register(OperationsDailyData)
 class OperationsDailyDataAdmin(admin.ModelAdmin):
-    list_display = ('report_date', 'today_total', 'godata_total', 'main_gate_walk', 'sub_gate_walk', 'car_visit', 'updated_at')
+    list_display = ('report_date', 'today_total', 'godata_total', 'main_gate_walk', 'sub_gate_walk', 'rear_gate_walk', 'car_visit', 'updated_at')
     list_filter = ('report_date',)
     search_fields = ('report_date', 'special_notes', 'internal_event', 'external_event')
     date_hierarchy = 'report_date'
@@ -75,23 +75,23 @@ class OperationsDailyDataAdmin(admin.ModelAdmin):
     fieldsets = (
         ('날짜', {'fields': ('report_date',)}),
         ('방문현황', {
-            'fields': ('today_total', 'godata_total', 'main_gate_walk', 'sub_gate_walk', 'car_visit', 'yesterday_total'),
+            'fields': ('today_total', 'godata_total', 'main_gate_walk', 'sub_gate_walk', 'rear_gate_walk', 'car_visit', 'yesterday_total'),
         }),
-        ('시간대별 입장 (주출입구/부출입구)', {
+        ('시간대별 입장 (주출입구/부출입구/후문주차장)', {
             'classes': ('collapse',),
             'fields': (
-                ('slot_0900_main', 'slot_0900_sub'),
-                ('slot_1000_main', 'slot_1000_sub'),
-                ('slot_1100_main', 'slot_1100_sub'),
-                ('slot_1200_main', 'slot_1200_sub'),
-                ('slot_1300_main', 'slot_1300_sub'),
-                ('slot_1400_main', 'slot_1400_sub'),
-                ('slot_1500_main', 'slot_1500_sub'),
-                ('slot_1600_main', 'slot_1600_sub'),
-                ('slot_1700_main', 'slot_1700_sub'),
-                ('slot_1800_main', 'slot_1800_sub'),
-                ('slot_1900_main', 'slot_1900_sub'),
-                ('slot_2000_main', 'slot_2000_sub'),
+                ('slot_0900_main', 'slot_0900_sub', 'slot_0900_rear'),
+                ('slot_1000_main', 'slot_1000_sub', 'slot_1000_rear'),
+                ('slot_1100_main', 'slot_1100_sub', 'slot_1100_rear'),
+                ('slot_1200_main', 'slot_1200_sub', 'slot_1200_rear'),
+                ('slot_1300_main', 'slot_1300_sub', 'slot_1300_rear'),
+                ('slot_1400_main', 'slot_1400_sub', 'slot_1400_rear'),
+                ('slot_1500_main', 'slot_1500_sub', 'slot_1500_rear'),
+                ('slot_1600_main', 'slot_1600_sub', 'slot_1600_rear'),
+                ('slot_1700_main', 'slot_1700_sub', 'slot_1700_rear'),
+                ('slot_1800_main', 'slot_1800_sub', 'slot_1800_rear'),
+                ('slot_1900_main', 'slot_1900_sub', 'slot_1900_rear'),
+                ('slot_2000_main', 'slot_2000_sub', 'slot_2000_rear'),
             ),
         }),
         ('명일 기상', {

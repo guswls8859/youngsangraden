@@ -46,9 +46,9 @@
                 {% else %}
                 <td class="duty-day {% if day == today.day and year == today.year and month == today.month %}today-cell{% endif %}"
                     data-date="{{ year }}-{{ month|stringformat:'02d' }}-{{ day|stringformat:'02d' }}">
-                    <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}">
-                        {{ day }}
-                    </div>
+                    <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}"
+                         data-day="{{ day }}">{{ day }}</div>
+                    <div class="cal-holiday" data-day="{{ day }}"></div>
                     <div class="duty-list" data-day="{{ day }}"></div>
                 </td>
                 {% endif %}
@@ -134,6 +134,13 @@
 .duty-row-name { font-weight: 600; }
 .duty-row-note { font-size: 0.75rem; color: #6c757d; }
 .text-indigo { color: #3949ab !important; }
+/* 공휴일 */
+.day-num.is-holiday { color: #d32f2f !important; }
+.cal-holiday {
+    font-size: 0.65rem; font-weight: 600;
+    color: #d32f2f; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 </style>
 {% endblock %}
 
@@ -141,6 +148,7 @@
 <script>
 const CSRF            = '{{ csrf_token }}';
 const DAY_DUTIES      = {{ day_duties_json|safe }};
+const DAY_HOLIDAYS    = {{ day_holidays_json|safe }};
 const CREATE_URL      = "{% url 'reports:duty_create' %}";
 const DELETE_BASE     = "/reports/duty/";
 
@@ -164,6 +172,18 @@ function renderDuties() {
             tag.innerHTML = `${emoji}${escHtml(d.name)}${noteHtml}`;
             el.appendChild(tag);
         });
+    });
+
+    // 공휴일
+    Object.keys(DAY_HOLIDAYS).forEach(day => {
+        const name = DAY_HOLIDAYS[day];
+        const numEl = document.querySelector(`.day-num[data-day="${day}"]`);
+        if (numEl) numEl.classList.add('is-holiday');
+        const wrap = document.querySelector(`.cal-holiday[data-day="${day}"]`);
+        if (wrap) {
+            wrap.textContent = name;
+            wrap.title = name;
+        }
     });
 }
 

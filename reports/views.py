@@ -631,6 +631,18 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
         day_vacations_json = json.dumps(day_vacations)
         day_duties_json    = json.dumps(day_duties)
 
+        # ── 공휴일 (한국 대체공휴일 포함) ────────────────────
+        day_holidays = {}
+        try:
+            import holidays as _holidays
+            kr = _holidays.KR(years=year)
+            for d, name in kr.items():
+                if d.month == month:
+                    day_holidays[d.day] = str(name)
+        except Exception:
+            pass
+        day_holidays_json = json.dumps(day_holidays)
+
         # ── 날씨 (오늘 ~ 이달말, 최대 16일까지만) ────────────────
         from .weather import fetch_weather_range, weather_label
         wx_start = max(today, month_start)
@@ -679,6 +691,7 @@ class TaskCalendarView(OperationsAccessMixin, TemplateView):
             'day_vacations_json': day_vacations_json,
             'day_duties_json': day_duties_json,
             'day_weather_json': day_weather_json,
+            'day_holidays_json': day_holidays_json,
             'selected_date': self.request.GET.get('selected', ''),
             'mode': mode,
             'emoji_list': emoji_list,
@@ -1073,9 +1086,13 @@ class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
 
         ops.main_gate_walk   = _int('main_gate_walk')
         ops.sub_gate_walk    = _int('sub_gate_walk')
+        ops.rear_gate_walk   = _int('rear_gate_walk')
         ops.car_visit        = _int('car_visit')
-        # 입장 총수 = 주출입구 + 부출입구 + 차량방문 (수기 수정값 반영)
-        ops.today_total      = ops.main_gate_walk + ops.sub_gate_walk + ops.car_visit
+        # 입장 총수 = 주 + 부 + 후문 + 차량 (수기 수정값 반영)
+        ops.today_total      = (
+            ops.main_gate_walk + ops.sub_gate_walk
+            + ops.rear_gate_walk + ops.car_visit
+        )
         # 전일 입장 총수: 전날 today_total 자동 참조
         prev_ops = OperationsDailyData.objects.filter(
             report_date=target_date - datetime.timedelta(days=1)).first()
@@ -1218,15 +1235,21 @@ def integrated_daily_excel(request):
             existing_dates.add(a_val)
 
     # ── 기준 파일에 없는 날짜만 DB에서 조회 ──────────────────
-    # 시간대별 데이터가 하나도 없는 행(slot 필드 전부 None)은 제외
+    # 시간대별 slot이 있거나 OR 게이트 값 중 하나라도 입력된 행 포함
+    # (게이트 4개가 모두 0인 완전 빈 행만 제외)
     from django.db.models import Q
     slot_filter = Q()
     for h in range(9, 21):
         slot_filter |= Q(**{f'slot_{h:02d}00_main__isnull': False})
         slot_filter |= Q(**{f'slot_{h:02d}00_sub__isnull':  False})
+        slot_filter |= Q(**{f'slot_{h:02d}00_rear__isnull': False})
+    gate_filter = (
+        Q(main_gate_walk__gt=0) | Q(sub_gate_walk__gt=0)
+        | Q(rear_gate_walk__gt=0) | Q(car_visit__gt=0)
+    )
     qs = OperationsDailyData.objects.exclude(
         report_date__in=existing_dates
-    ).filter(slot_filter).order_by('report_date')
+    ).filter(slot_filter | gate_filter).order_by('report_date')
 
     if not qs.exists():
         # 추가할 데이터 없음 — 기준 파일 그대로 반환
@@ -1260,10 +1283,10 @@ def integrated_daily_excel(request):
     # 스타일 참조용 2행 셀 목록
     ref_row = 2
 
-    def _slot(main, sub):
-        if main is None and sub is None:
+    def _slot(main, sub, rear):
+        if main is None and sub is None and rear is None:
             return None
-        return (main or 0) + (sub or 0)
+        return (main or 0) + (sub or 0) + (rear or 0)
 
     # ── 새 행 삽입 위치 결정 ──────────────────────────────────
     new_rows = list(qs)
@@ -1284,21 +1307,22 @@ def integrated_daily_excel(request):
 
         row_values = [
             ops.report_date,
-            ops.today_total,#여기 수정 했으니 참고하자
-            _slot(ops.slot_0900_main, ops.slot_0900_sub),
-            _slot(ops.slot_1000_main, ops.slot_1000_sub),
-            _slot(ops.slot_1100_main, ops.slot_1100_sub),
-            _slot(ops.slot_1200_main, ops.slot_1200_sub),
-            _slot(ops.slot_1300_main, ops.slot_1300_sub),
-            _slot(ops.slot_1400_main, ops.slot_1400_sub),
-            _slot(ops.slot_1500_main, ops.slot_1500_sub),
-            _slot(ops.slot_1600_main, ops.slot_1600_sub),
-            _slot(ops.slot_1700_main, ops.slot_1700_sub),
-            _slot(ops.slot_1800_main, ops.slot_1800_sub),
-            _slot(ops.slot_1900_main, ops.slot_1900_sub),
+            ops.today_total,
+            _slot(ops.slot_0900_main, ops.slot_0900_sub, ops.slot_0900_rear),
+            _slot(ops.slot_1000_main, ops.slot_1000_sub, ops.slot_1000_rear),
+            _slot(ops.slot_1100_main, ops.slot_1100_sub, ops.slot_1100_rear),
+            _slot(ops.slot_1200_main, ops.slot_1200_sub, ops.slot_1200_rear),
+            _slot(ops.slot_1300_main, ops.slot_1300_sub, ops.slot_1300_rear),
+            _slot(ops.slot_1400_main, ops.slot_1400_sub, ops.slot_1400_rear),
+            _slot(ops.slot_1500_main, ops.slot_1500_sub, ops.slot_1500_rear),
+            _slot(ops.slot_1600_main, ops.slot_1600_sub, ops.slot_1600_rear),
+            _slot(ops.slot_1700_main, ops.slot_1700_sub, ops.slot_1700_rear),
+            _slot(ops.slot_1800_main, ops.slot_1800_sub, ops.slot_1800_rear),
+            _slot(ops.slot_1900_main, ops.slot_1900_sub, ops.slot_1900_rear),
             ops.car_visit or '-',
             ops.main_gate_walk,
             ops.sub_gate_walk,
+            ops.rear_gate_walk,
         ]
 
         for col_idx, val in enumerate(row_values, start=1):
@@ -1308,10 +1332,10 @@ def integrated_daily_excel(request):
             if col_idx == 1:
                 dst.number_format = 'mm-dd-yy'
 
-    # ── 합계 행 SUM 수식 범위 갱신 (B~P열) ────────────────────
+    # ── 합계 행 SUM 수식 범위 갱신 (B~Q열) ────────────────────
     if new_sum_row is not None:
         last_data_after = new_sum_row - 1
-        for c in range(2, 17):  # B(2) ~ P(16)
+        for c in range(2, 18):  # B(2) ~ Q(17)
             col_letter = openpyxl.utils.get_column_letter(c)
             ws.cell(row=new_sum_row, column=c).value = (
                 f'=SUM({col_letter}2:{col_letter}{last_data_after})'
@@ -1894,12 +1918,24 @@ def duty_admin_list(request):
         .order_by('last_name', 'first_name', 'username')
     )
 
+    # 공휴일 (한국)
+    day_holidays = {}
+    try:
+        import holidays as _holidays
+        kr = _holidays.KR(years=year)
+        for d, name in kr.items():
+            if d.month == month:
+                day_holidays[d.day] = str(name)
+    except Exception:
+        pass
+
     return render(request, 'reports/duty_admin_list.html', {
         'year': year, 'month': month, 'today': today,
         'prev_year': prev_year, 'prev_month': prev_month,
         'next_year': next_year, 'next_month': next_month,
         'cal': cal,
         'day_duties_json': json.dumps(day_duties),
+        'day_holidays_json': json.dumps(day_holidays),
         'staff_list': staff,
     })
 

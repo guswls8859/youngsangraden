@@ -4,6 +4,28 @@
 
 ---
 
+## [1.1.8] - 2026-08-04
+
+### 추가
+- **GODATA 후문주차장 게이트 지원** — 2026-08~ GODATA 대시보드에 신규 추가된 "후문주차장" 게이트 데이터 수집·저장·표시
+  - 모델: `OperationsDailyData.rear_gate_walk` + `slot_HHMM_rear` × 12 필드 (`reports/migrations/0019_operationsdailydata_rear_gate_walk_and_more`)
+  - 스크래퍼 ([reports/godata_scraper.py](reports/godata_scraper.py)): "명" 패턴 6개(주/부/후문 × 입퇴), 시간대별 블록 6개 숫자 파싱, 4개 케이스 하위호환
+  - admin: 방문현황·시간대 fieldset에 rear 반영
+  - view POST: `today_total = main + sub + rear + car` 자동 합산
+  - 폼 UI: 4열 그리드(주도보/주차량/부1도보/부2주차장도보) + JS 실시간 합산
+  - 엑셀 다운로드: Q열(후문주차장) 추가, SUM 범위 B~P → B~Q 확장, `_slot()` rear 합산, 시간대 slot이 없어도 게이트값이 있으면 포함되도록 필터 완화
+  - HWPX: 신규 `sample3.hwpx` 기반, Row 3 방문현황 4열 배치 처리 (셀 개수로 자동 분기)
+- **캘린더에 공휴일 표시** ([templates/reports/task_calendar.html](templates/reports/task_calendar.html), [templates/reports/duty_admin_list.html](templates/reports/duty_admin_list.html))
+  - Python `holidays==0.101` 도입, 한국 공휴일·대체공휴일 자동 매핑
+  - 업무 캘린더 + 당직 캘린더 각 셀에 날짜 숫자 빨간색 + 공휴일 이름 표시
+  - Django view에서 해당 월의 공휴일을 `day_holidays_json`으로 컨텍스트 주입
+
+### 변경
+- **방문현황 라벨 통일** ([templates/reports/integrated_daily.html](templates/reports/integrated_daily.html))
+  - 한글 파일과 순서·명칭 일치: 주출입구 도보 / 주출입구 차량 / 부출입구1 도보 / 부출입구2 주차장 도보
+
+---
+
 ## [1.1.7] - 2026-06-09
 
 ### 추가

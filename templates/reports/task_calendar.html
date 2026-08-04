@@ -92,11 +92,11 @@
                 <td class="task-day {% if day == today.day and year == today.year and month == today.month %}today-cell{% endif %}"
                     data-date="{{ year }}-{{ month|stringformat:'02d' }}-{{ day|stringformat:'02d' }}">
                     <div class="d-flex justify-content-between align-items-start">
-                        <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}">
-                            {{ day }}
-                        </div>
+                        <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}"
+                             data-day="{{ day }}">{{ day }}</div>
                         <div class="cal-weather" data-day="{{ day }}"></div>
                     </div>
+                    <div class="cal-holiday" data-day="{{ day }}"></div>
                     <div class="cal-specials" data-day="{{ day }}"></div>
                     <div class="cal-names" data-day="{{ day }}"></div>
                 </td>
@@ -321,6 +321,13 @@
 }
 .cal-vacation { background: #d1e7dd; color: #0a3622; border: 1px solid #a3cfbb; }
 .cal-duty     { background: #e8eaf6; color: #283593; border: 1px solid #c5cae9; }
+/* 공휴일 */
+.day-num.is-holiday { color: #d32f2f !important; }
+.cal-holiday {
+    font-size: 0.65rem; font-weight: 600;
+    color: #d32f2f; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 /* 날씨 배지 (셀 우상단) */
 .cal-weather {
     font-size: 0.68rem;
@@ -412,6 +419,7 @@ const DAY_DOTS       = {{ day_dots_json|safe }};
 const DAY_VACATIONS  = {{ day_vacations_json|safe }};
 const DAY_DUTIES     = {{ day_duties_json|safe }};
 const DAY_WEATHER    = {{ day_weather_json|safe }};
+const DAY_HOLIDAYS   = {{ day_holidays_json|safe }};
 const MODE           = '{{ mode }}';
 const IS_MANAGER     = {% if request.user.role == 'manager' %}true{% else %}false{% endif %};
 const CREATE_URL     = "{% url 'reports:task_create' %}";
@@ -431,6 +439,23 @@ function renderDots() {
     // 매번 다시 그리므로 기존 태그/배지 초기화
     document.querySelectorAll('.cal-names, .cal-specials').forEach(el => {
         el.innerHTML = '';
+    });
+
+    // 공휴일 표시 (날짜 숫자 빨간색 + 이름 라벨)
+    document.querySelectorAll('.cal-holiday').forEach(el => {
+        el.innerHTML = '';
+        el.removeAttribute('title');
+    });
+    document.querySelectorAll('.day-num').forEach(el => el.classList.remove('is-holiday'));
+    Object.keys(DAY_HOLIDAYS).forEach(day => {
+        const name = DAY_HOLIDAYS[day];
+        const numEl = document.querySelector(`.day-num[data-day="${day}"]`);
+        if (numEl) numEl.classList.add('is-holiday');
+        const wrap = document.querySelector(`.cal-holiday[data-day="${day}"]`);
+        if (wrap) {
+            wrap.textContent = name;
+            wrap.title = name;
+        }
     });
 
     document.querySelectorAll('.cal-names').forEach(el => {

@@ -21,14 +21,17 @@ def _parse_count(text: str) -> int:
 
 def fetch_today_entry_count() -> dict | None:
     """
-    GODATA에서 금일 입장 총수, 주출입구, 부출입구 인원을 가져온다.
+    GODATA에서 금일 입장 총수, 주/부/후문주차장 출입구 인원을 가져온다.
 
     반환:
         {
-            'today_total':    int,  # 입장 총수
-            'today_exit':     int,  # 퇴장 총수
-            'main_gate_walk': int,  # 주출입구 도보
-            'sub_gate_walk':  int,  # 부출입구 도보
+            'today_total':    int,   # 입장 총수 (대시보드 표시값)
+            'today_exit':     int,   # 퇴장 총수
+            'main_gate_walk': int,   # 주출입구 도보
+            'sub_gate_walk':  int,   # 부출입구 도보
+            'rear_gate_walk': int,   # 후문주차장 도보 (2026-08 추가)
+            'time_slots':     dict,  # slot_HHMM_main/sub/rear
+            'nav_ok':         bool,
         }
         실패 시 None
     """
@@ -107,19 +110,29 @@ def fetch_today_entry_count() -> dict | None:
         if nav_ok:
             found = re.findall(r'[\d,]+\s*명', body)
             logger.info('[SLOT-TEST] "명" 패턴 전체(%d개): %s', len(found), found)
-            # 평일: found = [부출입구, 부퇴장, 주출입구, 주퇴장] (4개)
-            # 토·일: GODATA가 주간 누적합을 앞에 추가 → 일별 합계는 항상 마지막 4개
-            if len(found) >= 4:
-                sub_gate  = _parse_count(found[-4])  # 부출입구
-                main_gate = _parse_count(found[-2])  # 주출입구
+            # 2026-08~: 게이트 3개(주/부/후문주차장) × 입/퇴 = 6개
+            # 이전:      게이트 2개(주/부)          × 입/퇴 = 4개
+            # 토·일: GODATA가 주간 누적합을 앞에 추가할 수 있으므로 마지막 그룹 사용
+            if len(found) >= 6:
+                # [ ..., 부입, 부퇴, 주입, 주퇴, 후입, 후퇴 ]
+                sub_gate  = _parse_count(found[-6])
+                main_gate = _parse_count(found[-4])
+                rear_gate = _parse_count(found[-2])
+            elif len(found) >= 4:
+                # 하위호환: [ ..., 부입, 부퇴, 주입, 주퇴 ]
+                sub_gate  = _parse_count(found[-4])
+                main_gate = _parse_count(found[-2])
+                rear_gate = None
             else:
-                logger.warning('GODATA: "명" 패턴 부족 (%d개) — 주/부출입구 None 처리', len(found))
+                logger.warning('GODATA: "명" 패턴 부족 (%d개) — 게이트 None 처리', len(found))
                 sub_gate  = None
                 main_gate = None
+                rear_gate = None
             time_slots = _parse_time_slots(body)
         else:
             sub_gate   = None
             main_gate  = None
+            rear_gate  = None
             time_slots = None  # None → DB 업데이트 스킵
 
         return {
@@ -127,6 +140,7 @@ def fetch_today_entry_count() -> dict | None:
             'today_exit':     _parse_count(m_exit.group(1)) if m_exit else 0,
             'main_gate_walk': main_gate,
             'sub_gate_walk':  sub_gate,
+            'rear_gate_walk': rear_gate,
             'time_slots':     time_slots,
             'nav_ok':         nav_ok,
         }
@@ -174,10 +188,13 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
     if data.get('nav_ok'):
         main_g = data.get('main_gate_walk')
         sub_g  = data.get('sub_gate_walk')
+        rear_g = data.get('rear_gate_walk')
         if main_g is not None:
             godata_fields['main_gate_walk'] = main_g
         if sub_g is not None:
             godata_fields['sub_gate_walk']  = sub_g
+        if rear_g is not None:
+            godata_fields['rear_gate_walk'] = rear_g
         time_slots = data.get('time_slots') or {}
         if time_slots:
             logger.info('[SLOT-TEST] 저장할 시간대별 데이터: %s', time_slots)
@@ -198,13 +215,14 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
         ops.save(update_fields=list(godata_fields.keys()) + ['updated_at'])
 
     logger.info(
-        'GODATA 동기화 완료: %s 도보=%d 차량=%d 입장총수=%d 주출입구=%s 부출입구=%s nav=%s (신규=%s)',
+        'GODATA 동기화 완료: %s 도보=%d 차량=%d 입장총수=%d 주=%s 부=%s 후문=%s nav=%s (신규=%s)',
         target_date,
         godata_pedestrian,
         car_visit,
         godata_pedestrian + car_visit,
         data.get('main_gate_walk') if data.get('nav_ok') else '미수집',
         data.get('sub_gate_walk')  if data.get('nav_ok') else '미수집',
+        data.get('rear_gate_walk') if data.get('nav_ok') else '미수집',
         data.get('nav_ok'),
         created,
     )
@@ -215,20 +233,21 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
 
 def _parse_time_slots(body: str) -> dict:
     """
-    body에서 시간대별 주출입구·부출입구 입장 인원을 파싱한다.
+    body에서 시간대별 주/부/후문주차장 입장 인원을 파싱한다.
 
-    GODATA body 구조 (줄 단위):
+    GODATA body 구조 (줄 단위, 2026-08~ 6개 숫자):
         09:00 ~ 10:00
         {부출입구 입장}   ← nums[0]
         {부출입구 퇴장}   ← nums[1]  (저장 안 함)
         {주출입구 입장}   ← nums[2]
         {주출입구 퇴장}   ← nums[3]  (저장 안 함)
+        {후문주차장 입장} ← nums[4]  (2026-08 추가)
+        {후문주차장 퇴장} ← nums[5]  (저장 안 함)
         10:00 ~ 11:00
         ...
-        {부출입구 입장 합계} 명
-        ...
 
-    반환: {'slot_0900_sub': int, 'slot_0900_main': int, ...}  실패 시 빈 dict
+    반환: {'slot_0900_sub': int, 'slot_0900_main': int, 'slot_0900_rear': int, ...}
+    실패 시 빈 dict.
 
     [테스트 모드] 파싱 과정 전체를 INFO 로그로 출력.
     """
@@ -268,13 +287,18 @@ def _parse_time_slots(body: str) -> dict:
             logger.warning('[SLOT-TEST] %s:00 숫자 부족(%d개) — 스킵', start_h, len(nums))
             continue
 
-        # nums[0]=부출입구입장, nums[1]=부출입구퇴장, nums[2]=주출입구입장, nums[3]=주출입구퇴장
+        # nums[0]=부입, nums[1]=부퇴, nums[2]=주입, nums[3]=주퇴, nums[4]=후입, nums[5]=후퇴
         sub_entry  = nums[0]
         main_entry = nums[2]
+        rear_entry = nums[4] if len(nums) >= 5 else None
         key        = f'slot_{start_h}00'
         results[f'{key}_sub']  = sub_entry
         results[f'{key}_main'] = main_entry
-        logger.info('[SLOT-TEST] %s:00 → 주출입구=%d 부출입구=%d', start_h, main_entry, sub_entry)
+        if rear_entry is not None:
+            results[f'{key}_rear'] = rear_entry
+        logger.info('[SLOT-TEST] %s:00 → 주=%d 부=%d 후문=%s',
+                    start_h, main_entry, sub_entry,
+                    rear_entry if rear_entry is not None else '없음')
 
     logger.info('[SLOT-TEST] ─── 최종 파싱 결과 (%d슬롯): %s ───', len(results) // 2, results)
     return results

@@ -33,9 +33,9 @@ HP = 'http://www.hancom.co.kr/hwpml/2011/paragraph'
 HC = 'http://www.hancom.co.kr/hwpml/2011/core'
 NS = {'hp': HP, 'hc': HC}
 
-BASE_HWPX     = Path(__file__).parent / 'data' / 'base_report.hwpx'
+BASE_HWPX     = Path(__file__).parent / 'data' / 'sample3.hwpx'   # 2026-08~ 방문현황 4열(주/차량/부/후문) 신규
 SAMPLE2_HWPX  = Path(__file__).parent / 'data' / 'sample2.hwpx'   # 내부행사 표 템플릿
-SAMPLE1_HWPX  = Path(__file__).parent / 'data' / 'sample1.hwpx'   # 작업사진 섹션 템플릿
+SAMPLE1_HWPX  = Path(__file__).parent / 'data' / 'sample1.hwpx'   # 작업사진 섹션 템플릿 (구 3열 방문현황 유지)
 
 
 # ── 헬퍼 함수 ─────────────────────────────────────────────────────────────────
@@ -371,6 +371,7 @@ def build_integrated_daily_hwpx(
     # 1. 데이터 정리
     today_total   = _v(ops, 'today_total')
     car_visit     = _v(ops, 'car_visit')
+    rear_gate     = _v(ops, 'rear_gate_walk')
     p_family      = _v(ops, 'parking_family')
     p_dis         = _v(ops, 'parking_disabled')
     p_preg        = _v(ops, 'parking_pregnant')
@@ -427,14 +428,22 @@ def build_integrated_daily_hwpx(
     p0_t = visit_sl.findall('hp:p', NS)[0].find('hp:run/hp:t', NS)
     if p0_t is not None:
         p0_t.text = f"입장 {_fmt_num(today_total)}명"
-    # 중첩 테이블: 주출입구 / 부출입구 / 차량
-    # 템플릿 구조: inner_row0=헤더(3셀), inner_row1=데이터(3셀)
+    # 중첩 테이블 셀 배치 (템플릿 셀 개수에 따라 자동 분기)
+    #   - 4열 (sample3, 2026-08~): [주출입구도보, 주출입구차량, 부출입구1도보, 부출입구2주차장도보]
+    #   - 3열 (구버전 sample1):     [주출입구, 부출입구, 차량방문]
     inner_vtbl = cell_visit.find('.//hp:tbl', NS)
     if inner_vtbl is not None:
         v_rows = inner_vtbl.findall('hp:tr', NS)
         if len(v_rows) >= 2:
             dc = v_rows[1].findall('hp:tc', NS)
-            if len(dc) >= 3:
+            if len(dc) >= 4:
+                # 신규 4열
+                _set_t(dc[0], _fmt_num(_v(ops, 'main_gate_walk')))  # 주출입구 도보
+                _set_t(dc[1], _fmt_num(car_visit))                    # 주출입구 차량방문
+                _set_t(dc[2], _fmt_num(_v(ops, 'sub_gate_walk')))     # 부출입구1 도보
+                _set_t(dc[3], _fmt_num(rear_gate))                    # 부출입구2 주차장 도보
+            elif len(dc) >= 3:
+                # 구 3열 (하위호환)
                 _set_t(dc[0], _fmt_num(_v(ops, 'main_gate_walk')))
                 _set_t(dc[1], _fmt_num(_v(ops, 'sub_gate_walk')))
                 _set_t(dc[2], _fmt_num(car_visit))
