@@ -33,9 +33,11 @@ HP = 'http://www.hancom.co.kr/hwpml/2011/paragraph'
 HC = 'http://www.hancom.co.kr/hwpml/2011/core'
 NS = {'hp': HP, 'hc': HC}
 
-BASE_HWPX     = Path(__file__).parent / 'data' / 'sample3.hwpx'   # 2026-08~ 방문현황 4열(주/차량/부/후문) 신규
+BASE_HWPX     = Path(__file__).parent / 'data' / 'sample4.hwpx'   # 2026-08~ 통합: 방문현황 4열 + 사진 단락 포함
 SAMPLE2_HWPX  = Path(__file__).parent / 'data' / 'sample2.hwpx'   # 내부행사 표 템플릿
-SAMPLE1_HWPX  = Path(__file__).parent / 'data' / 'sample1.hwpx'   # 작업사진 섹션 템플릿 (구 3열 방문현황 유지)
+# sample4 원본 이미지 파일 (사용자 사진으로 대체하거나 삭제됨)
+_SAMPLE4_ORIG_IMAGES = {'BinData/image1.JPEG', 'BinData/image2.JPEG'}
+_SAMPLE4_ORIG_IMAGE_IDS = {'image1', 'image2'}
 
 
 # ── 헬퍼 함수 ─────────────────────────────────────────────────────────────────
@@ -407,25 +409,21 @@ def build_integrated_daily_hwpx(
     while len(bb_rows) < 2:
         bb_rows.append({'label': '', 'baseball': {}, 'total': {}})
 
-    # 2. 기반 HWPX: 항상 sample3(신 4열 방문현황). 사진 있으면 sample1에서 템플릿만 가져옴
-    src_path = BASE_HWPX  # sample3
+    # 2. 기반 HWPX: sample4 (통합판 — 방문현황 4열 + 사진 단락 포함)
+    src_path = BASE_HWPX  # sample4
     with zipfile.ZipFile(src_path, 'r') as zin:
         sec0_bytes = zin.read('Contents/section0.xml')
 
-    # 사진 있을 때 sample1에서 사진 단락 템플릿 추출
-    photo_template = None
-    if has_any_photos:
-        try:
-            from copy import deepcopy
-            with zipfile.ZipFile(SAMPLE1_HWPX, 'r') as s1zip:
-                s1_sec = ET.fromstring(s1zip.read('Contents/section0.xml'))
-            s1_paras = s1_sec.findall('hp:p', NS)
-            if len(s1_paras) >= 2:
-                photo_template = deepcopy(s1_paras[1])
-        except Exception:
-            photo_template = None
-
     root = ET.fromstring(sec0_bytes)
+
+    # sample4는 p0(메인표) + p1(사진단락) 구조. 사진 단락은 항상 root에서 제거,
+    # 사진이 있으면 template으로 사용해서 카테고리별로 새로 append.
+    from copy import deepcopy
+    photo_template = None
+    top_paras = root.findall('hp:p', NS)
+    if len(top_paras) >= 2:
+        photo_template = deepcopy(top_paras[1])
+        root.remove(top_paras[1])
     tbl  = _find_main_table(root)
     rows = tbl.findall('hp:tr', NS)
 
@@ -642,25 +640,27 @@ def build_integrated_daily_hwpx(
     xml_decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
     sec0_new = (xml_decl + ET.tostring(root, encoding='unicode')).encode('utf-8')
 
-    # 4. 새 HWPX ZIP 조립 — base는 항상 sample3, 사진은 user 업로드분만 새로 삽입
+    # 4. 새 HWPX ZIP 조립 — base=sample4, 사용자 사진으로 원본 이미지 대체
+    #  - sample4 원본 image1.JPEG/image2.JPEG 파일 항상 제거
+    #  - manifest에서 image1/image2 opf:item 제거 후 새 파일명(.jpeg)으로 재등록
     out = io.BytesIO()
     with zipfile.ZipFile(src_path, 'r') as zin:
-        src_names = set(zin.namelist())
         with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
+                if item.filename in _SAMPLE4_ORIG_IMAGES:
+                    continue  # sample4 원본 이미지 항상 스킵
                 if item.filename == 'Contents/section0.xml':
                     zout.writestr(item, sec0_new)
-                elif item.filename in photo_assets:
-                    zout.writestr(item, photo_assets[item.filename])
                 elif item.filename == 'Contents/content.hpf':
                     hpf_xml = zin.read(item.filename).decode('utf-8')
-                    # 새로 삽입된 image들 manifest 항목 추가
+                    # 원본 이미지 manifest 항목 항상 제거
+                    hpf_xml = _strip_manifest_items(hpf_xml, _SAMPLE4_ORIG_IMAGE_IDS)
+                    # 신규 삽입된 image들 manifest 항목 추가
                     extra_items = [
                         {'id': fname.split('/')[-1].rsplit('.', 1)[0],
                          'href': fname,
                          'media_type': 'image/jpeg'}
                         for fname in photo_assets
-                        if fname not in src_names
                     ]
                     if extra_items:
                         hpf_xml = _inject_manifest_items(hpf_xml, extra_items)
@@ -669,10 +669,9 @@ def build_integrated_daily_hwpx(
                     zout.writestr(item, hpf_xml.encode('utf-8'))
                 else:
                     zout.writestr(item, zin.read(item.filename))
-            # source(sample3)에 없던 신규 이미지 추가 (사진 첨부된 경우)
+            # 새 사진 파일 추가 (image1.jpeg, image2.jpeg, ...)
             for fname, data in photo_assets.items():
-                if fname not in src_names:
-                    zout.writestr(fname, data)
+                zout.writestr(fname, data)
 
     out.seek(0)
     return out.read()
