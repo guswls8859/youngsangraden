@@ -4,6 +4,17 @@
 
 ---
 
+## [1.1.9] - 2026-08-07
+
+### 변경
+- **HWPX 사진 첨부 시 방문현황 4열 양식 유지** ([reports/hwpx_report.py](reports/hwpx_report.py))
+  - 이전: 작업사진이 있으면 `sample1.hwpx`(구 3열 방문현황)을 base로 사용 → 후문주차장 열 누락되던 문제
+  - 변경: 항상 `sample3.hwpx`(신 4열)을 base로 쓰고, 사진 단락 템플릿만 sample1에서 XML로 추출해서 append
+  - `_attach_work_photos_multi()`가 외부 `photo_template` 파라미터 지원 (하위호환 유지)
+  - zip 조립부: 사용자 업로드 이미지만 신규 삽입, manifest에 신규 image 참조 등록
+
+---
+
 ## [1.1.8] - 2026-08-04
 
 ### 추가

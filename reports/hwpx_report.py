@@ -407,10 +407,23 @@ def build_integrated_daily_hwpx(
     while len(bb_rows) < 2:
         bb_rows.append({'label': '', 'baseball': {}, 'total': {}})
 
-    # 2. 기반 HWPX 선택 — 사진이 하나라도 있으면 sample1(스타일 superset + 사진 단락 포함)
-    src_path = SAMPLE1_HWPX if has_any_photos else BASE_HWPX
+    # 2. 기반 HWPX: 항상 sample3(신 4열 방문현황). 사진 있으면 sample1에서 템플릿만 가져옴
+    src_path = BASE_HWPX  # sample3
     with zipfile.ZipFile(src_path, 'r') as zin:
         sec0_bytes = zin.read('Contents/section0.xml')
+
+    # 사진 있을 때 sample1에서 사진 단락 템플릿 추출
+    photo_template = None
+    if has_any_photos:
+        try:
+            from copy import deepcopy
+            with zipfile.ZipFile(SAMPLE1_HWPX, 'r') as s1zip:
+                s1_sec = ET.fromstring(s1zip.read('Contents/section0.xml'))
+            s1_paras = s1_sec.findall('hp:p', NS)
+            if len(s1_paras) >= 2:
+                photo_template = deepcopy(s1_paras[1])
+        except Exception:
+            photo_template = None
 
     root = ET.fromstring(sec0_bytes)
     tbl  = _find_main_table(root)
@@ -619,36 +632,29 @@ def build_integrated_daily_hwpx(
     photo_assets   = {}
     manifest_items = []
     unused_ids     = set()
-    if has_any_photos:
+    if has_any_photos and photo_template is not None:
         photo_assets, manifest_items, unused_ids = _attach_work_photos_multi(
             root, photos_by_cat, captions_by_cat, headers_by_cat,
+            photo_template=photo_template,
         )
 
     # 3. section0.xml 직렬화
     xml_decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
     sec0_new = (xml_decl + ET.tostring(root, encoding='unicode')).encode('utf-8')
 
-    # 4. 새 HWPX ZIP 조립 — source는 사진 유무에 따라 sample1/base
-    # 사용 안 한 image ID는 BinData에서 제외하고 manifest에서도 제거
-    unused_files = {f'BinData/{i}.jpeg' for i in unused_ids}
-    # 사용자가 추가한 이미지 중 source에 없는 것 (image5+)
-    src_names = set()
+    # 4. 새 HWPX ZIP 조립 — base는 항상 sample3, 사진은 user 업로드분만 새로 삽입
     out = io.BytesIO()
     with zipfile.ZipFile(src_path, 'r') as zin:
         src_names = set(zin.namelist())
         with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
-                if item.filename in unused_files:
-                    continue
                 if item.filename == 'Contents/section0.xml':
                     zout.writestr(item, sec0_new)
                 elif item.filename in photo_assets:
                     zout.writestr(item, photo_assets[item.filename])
                 elif item.filename == 'Contents/content.hpf':
                     hpf_xml = zin.read(item.filename).decode('utf-8')
-                    if unused_ids:
-                        hpf_xml = _strip_manifest_items(hpf_xml, unused_ids)
-                    # source에 없던 신규 image들 manifest 항목 추가
+                    # 새로 삽입된 image들 manifest 항목 추가
                     extra_items = [
                         {'id': fname.split('/')[-1].rsplit('.', 1)[0],
                          'href': fname,
@@ -663,7 +669,7 @@ def build_integrated_daily_hwpx(
                     zout.writestr(item, hpf_xml.encode('utf-8'))
                 else:
                     zout.writestr(item, zin.read(item.filename))
-            # source에 없던 신규 이미지 추가
+            # source(sample3)에 없던 신규 이미지 추가 (사진 첨부된 경우)
             for fname, data in photo_assets.items():
                 if fname not in src_names:
                     zout.writestr(fname, data)
@@ -683,14 +689,16 @@ def _strip_manifest_items(hpf_xml, unused_ids):
 
 # ── 작업사진 처리 헬퍼 ─────────────────────────────────────────────────────────
 
-def _attach_work_photos_multi(root, photos_by_cat, captions_by_cat, headers_by_cat):
+def _attach_work_photos_multi(root, photos_by_cat, captions_by_cat, headers_by_cat,
+                              photo_template=None):
     """카테고리별로 작업사진 단락을 root에 부착.
 
-    sample1 base에 이미 있는 photo 단락(image1~image4 사용)을 템플릿으로 deepcopy 후
-    카테고리별로 클론·수정해서 append. 사진 ID는 글로벌 카운터(image1, image2, ...).
+    photo_template : 외부에서 주입한 사진 단락 템플릿 (sample1에서 뽑아 온 것).
+                     None이면 root의 두 번째 paragraph를 템플릿으로 사용 (하위호환).
+    사진 ID는 글로벌 카운터(image1, image2, ...).
 
     Returns:
-        photo_assets   : {'BinData/imageN.jpeg': bytes, ...} — 사용자 사진 + sample1 원본 덮어쓰기
+        photo_assets   : {'BinData/imageN.jpeg': bytes, ...} — 사용자 사진
         manifest_items : []  (manifest 추가는 빌더에서 처리)
         unused_ids     : 미사용 템플릿 image ID (예: 총 2장만 쓰면 image3, image4가 미사용)
     """
@@ -698,12 +706,15 @@ def _attach_work_photos_multi(root, photos_by_cat, captions_by_cat, headers_by_c
 
     photo_assets = {}
 
-    paras = root.findall('hp:p', NS)
-    if len(paras) < 2:
-        return photo_assets, [], set()
-    photo_para_template = paras[1]
-    template_copy = deepcopy(photo_para_template)
-    root.remove(photo_para_template)
+    if photo_template is None:
+        paras = root.findall('hp:p', NS)
+        if len(paras) < 2:
+            return photo_assets, [], set()
+        template_source = paras[1]
+        template_copy = deepcopy(template_source)
+        root.remove(template_source)
+    else:
+        template_copy = deepcopy(photo_template)
 
     image_idx_counter = [1]   # 글로벌 image 카운터
 
