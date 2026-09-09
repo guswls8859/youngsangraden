@@ -544,29 +544,65 @@ def build_integrated_daily_pdf(target_date, ops_data, sf_reservations, sf_entrie
     }
 
     def get_sf_data(field_keys, slots):
-        """field_keys: list of field_type str, slots: list of (start,end,label)"""
+        """field_keys: list of field_type str, slots: list of (start,end,label).
+
+        같은 시간대에 여러 예약(테니스 4건 동시 등)이 있으면 전부 합산.
+        tennis처럼 field_keys가 여러 개면 (grass+hard) 두 코트도 함께 합산.
+        entry(수기)가 있는 슬롯은 해당 슬롯의 reservation은 무시.
+        """
         rows = []
         for start_t, end_t, label in slots:
-            rv_list = [r for r in sf_reservations
-                       if r.field_type in field_keys
-                       and r.time_start.strftime('%H:%M') == start_t
-                       and r.status == 'confirmed']
-            en_list = [e for e in sf_entries
-                       if e.field_type in field_keys
-                       and e.time_start and e.time_start.strftime('%H:%M') == start_t]
-            if rv_list:
-                r = rv_list[0]
-                rv_cnt   = r.total_users or '-'
-                actual   = (r.actual_adult_count or 0) + (r.actual_child_count or 0) or '-'
-                category = '쿼터' if r.scoreboard else '일반'
-            elif en_list:
-                e = en_list[0]
-                rv_cnt   = '-'
-                actual   = (e.actual_adult_count or 0) + (e.actual_child_count or 0) or '-'
-                category = e.get_category_display()
-            else:
-                rv_cnt, actual, category = '-', '-', '-'
+            matched_ens = [e for e in sf_entries
+                           if e.field_type in field_keys
+                           and e.time_start and e.time_start.strftime('%H:%M') == start_t]
+            entry_keys = {(e.field_type, e.time_start) for e in matched_ens}
+            matched_rvs = [r for r in sf_reservations
+                           if r.field_type in field_keys
+                           and r.time_start.strftime('%H:%M') == start_t
+                           and r.status == 'confirmed'
+                           and (r.field_type, r.time_start) not in entry_keys]
+
             time_label = f'{label}\n({start_t}~{end_t})'
+            if not matched_ens and not matched_rvs:
+                rows.append((time_label, '-', '-', '-'))
+                continue
+
+            # 예약인원 합계
+            rv_sum, rv_has = 0, False
+            for e in matched_ens:
+                if e.reserved_adult_count is not None or e.reserved_child_count is not None:
+                    rv_sum += (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
+                    rv_has = True
+                else:
+                    for r in sf_reservations:
+                        if (r.field_type == e.field_type and r.time_start == e.time_start
+                                and r.total_users):
+                            rv_sum += r.total_users
+                            rv_has = True
+                            break
+            for r in matched_rvs:
+                if r.total_users:
+                    rv_sum += r.total_users
+                    rv_has = True
+
+            # 입장인원 합계 (성인+어린이)
+            act_sum, act_has = 0, False
+            for e in matched_ens:
+                if e.actual_adult_count is not None or e.actual_child_count is not None:
+                    act_sum += (e.actual_adult_count or 0) + (e.actual_child_count or 0)
+                    act_has = True
+            for r in matched_rvs:
+                if r.actual_adult_count is not None or r.actual_child_count is not None:
+                    act_sum += (r.actual_adult_count or 0) + (r.actual_child_count or 0)
+                    act_has = True
+
+            if matched_ens:
+                category = matched_ens[0].get_category_display()
+            else:
+                category = '쿼터' if matched_rvs[0].scoreboard else '일반'
+
+            rv_cnt = rv_sum if rv_has else '-'
+            actual = act_sum if act_has else '-'
             rows.append((time_label, category, rv_cnt, actual))
         return rows
 
