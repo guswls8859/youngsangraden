@@ -1361,40 +1361,70 @@ def integrated_daily_excel(request):
 
 
 def _sf_slot(sf_reservations, sf_entries, field_types, start_time):
-    """구장/시작시간으로 entry 또는 reservation 데이터를 반환한다."""
+    """구장/시작시간으로 매칭되는 모든 entry + reservation의 인원을 합산해서 반환.
+
+    - 같은 슬롯에 여러 예약(예: 테니스 코트에 4건 동시)이 있으면 모두 합산.
+    - tennis처럼 field_types가 여러 개(['tennis_grass','tennis_hard'])면 두 코트도 합산.
+    - entry(수기)가 있으면 그 슬롯의 reservation은 무시 (entry가 우선).
+    """
     CAT = {'normal': '일반', 'quarter': '쿼터', 'event': '행사', 'other': '기타'}
     if isinstance(field_types, str):
         field_types = [field_types]
-    for e in sf_entries:
-        if e.field_type in field_types and e.time_start == start_time:
-            # 예약인원: entry의 reserved_* 필드 우선, 없으면 매칭 Reservation의 total_users
-            res = None
-            if e.reserved_adult_count is not None or e.reserved_child_count is not None:
-                res = (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
-            else:
-                rv = next((r for r in sf_reservations
-                           if r.field_type in field_types and r.time_start == start_time), None)
-                res = rv.total_users if rv and rv.total_users else None
-            # 입장인원: actual_* 필드 (성인/어린이 둘 다 합산)
-            act = None
-            if e.actual_adult_count is not None or e.actual_child_count is not None:
-                act = (e.actual_adult_count or 0) + (e.actual_child_count or 0)
-            return {
-                'cat':      CAT.get(e.category, e.category),
-                'reserved': res,
-                'actual':   act,
-            }
-    for r in sf_reservations:
-        if r.field_type in field_types and r.time_start == start_time:
-            act = None
-            if r.actual_adult_count is not None or r.actual_child_count is not None:
-                act = (r.actual_adult_count or 0) + (r.actual_child_count or 0)
-            return {
-                'cat':      '일반',
-                'reserved': r.total_users,
-                'actual':   act,
-            }
-    return {'cat': None, 'reserved': None, 'actual': None}
+
+    matched_entries = [
+        e for e in sf_entries
+        if e.field_type in field_types and e.time_start == start_time
+    ]
+    entry_keys = {(e.field_type, e.time_start) for e in matched_entries}
+    remaining_reservations = [
+        r for r in sf_reservations
+        if r.field_type in field_types and r.time_start == start_time
+           and (r.field_type, r.time_start) not in entry_keys
+    ]
+
+    if not matched_entries and not remaining_reservations:
+        return {'cat': None, 'reserved': None, 'actual': None}
+
+    # 예약인원 합계
+    res_sum, res_has = 0, False
+    for e in matched_entries:
+        if e.reserved_adult_count is not None or e.reserved_child_count is not None:
+            res_sum += (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
+            res_has = True
+        else:
+            # entry에 reserved 없으면 같은 (field,time)의 reservation total_users로 fallback
+            for r in sf_reservations:
+                if r.field_type == e.field_type and r.time_start == e.time_start and r.total_users:
+                    res_sum += r.total_users
+                    res_has = True
+                    break
+    for r in remaining_reservations:
+        if r.total_users:
+            res_sum += r.total_users
+            res_has = True
+
+    # 입장인원 합계 (성인+어린이)
+    act_sum, act_has = 0, False
+    for e in matched_entries:
+        if e.actual_adult_count is not None or e.actual_child_count is not None:
+            act_sum += (e.actual_adult_count or 0) + (e.actual_child_count or 0)
+            act_has = True
+    for r in remaining_reservations:
+        if r.actual_adult_count is not None or r.actual_child_count is not None:
+            act_sum += (r.actual_adult_count or 0) + (r.actual_child_count or 0)
+            act_has = True
+
+    # cat 라벨: entry 첫 매치 우선, 없으면 '일반'
+    if matched_entries:
+        cat = CAT.get(matched_entries[0].category, matched_entries[0].category)
+    else:
+        cat = '일반'
+
+    return {
+        'cat':      cat,
+        'reserved': res_sum if res_has else None,
+        'actual':   act_sum if act_has else None,
+    }
 
 
 def _sf_day_total_by_cat(sf_reservations, sf_entries, cat):

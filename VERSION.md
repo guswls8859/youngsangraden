@@ -6,6 +6,50 @@
 
 ---
 
+## [1.2.1] - 2026-09-09
+
+### 변경
+- **스포츠필드 슬롯 인원 집계 버그 수정** ([reports/views.py](reports/views.py) `_sf_slot`)
+  - 이전: 같은 시간대에 여러 예약(예: 테니스 코트 4건 동시 예약)이 있어도 **첫 예약 1건만** 반환 → 실제 인원수 대신 사실상 "1건의 인원수"만 표기
+  - 변경: 매칭되는 **모든 entry + reservation의 인원 합산**해서 반환
+  - tennis처럼 field_types가 여러 개(`['tennis_grass','tennis_hard']`)인 경우 두 코트 예약도 함께 합산
+  - entry(수기)가 있는 슬롯은 해당 슬롯의 reservation은 무시 (entry 우선 정책 유지)
+  - 결과 예: 테니스 1타임(10:00) 예약 3건(2+4+4) → **예약 10명, 이용 7명**으로 정상 합산
+
+### 핵심 코드
+```python
+# reports/views.py — _sf_slot()
+matched_entries = [
+    e for e in sf_entries
+    if e.field_type in field_types and e.time_start == start_time
+]
+entry_keys = {(e.field_type, e.time_start) for e in matched_entries}
+remaining_reservations = [
+    r for r in sf_reservations
+    if r.field_type in field_types and r.time_start == start_time
+       and (r.field_type, r.time_start) not in entry_keys
+]
+
+# 예약인원 합계 (entry는 reserved_* 우선, reservation은 total_users)
+res_sum, res_has = 0, False
+for e in matched_entries:
+    if e.reserved_adult_count is not None or e.reserved_child_count is not None:
+        res_sum += (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
+        res_has = True
+    else:
+        for r in sf_reservations:
+            if r.field_type == e.field_type and r.time_start == e.time_start and r.total_users:
+                res_sum += r.total_users; res_has = True; break
+for r in remaining_reservations:
+    if r.total_users:
+        res_sum += r.total_users; res_has = True
+
+# 입장인원 합계 (성인+어린이)
+# ... 동일 패턴 ...
+```
+
+---
+
 ## [1.2.0] - 2026-08-12
 
 ### 변경
