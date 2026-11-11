@@ -1410,20 +1410,21 @@ def _sf_slot(items, field_types, start_time):
 
 
 def _sf_day_total(items, cat_filter):
-    """하루 전체(모든 구장) 합계. cat_filter: 'normal'(쿼터 외 전부) / 'quarter' / None(전체)."""
-    if cat_filter == 'quarter':
-        sel = [it for it in items if it[2] == 'quarter']
-    elif cat_filter == 'normal':
-        sel = [it for it in items if it[2] != 'quarter']
+    """하루 전체(모든 구장) 분류별 합계.
+
+    cat_filter: 'normal' → 쿼터·행사 외 전부(일반+기타) / 'quarter' / 'event'
+    """
+    if cat_filter == 'normal':
+        sel = [it for it in items if it[2] not in ('quarter', 'event')]
     else:
-        sel = items
+        sel = [it for it in items if it[2] == cat_filter]
     reserved = len(sel)
     actual = sum(1 for it in sel if not it[3])
     return {'reserved': reserved or None, 'actual': actual if reserved else None}
 
 
-# 합계 열: 야구장 행 순서대로 일반 / 쿼터 / 계
-_SF_TOTAL_ROWS = [('일반', 'normal'), ('쿼터', 'quarter'), ('계', None)]
+# 합계 열: 야구장 행 순서대로 일반 / 쿼터 / 행사 (sample5 양식)
+_SF_TOTAL_ROWS = [('일반', 'normal'), ('쿼터', 'quarter'), ('행사', 'event')]
 
 
 def _organize_sf_slots(sf_reservations, sf_entries):
