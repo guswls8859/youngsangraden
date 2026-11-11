@@ -6,6 +6,39 @@
 
 ---
 
+## [1.3.0] - 2026-11-10
+
+### 변경 — 스포츠필드 집계 기준 개편 (sample5 양식)
+- **인원 → 건별 집계** ([reports/views.py](reports/views.py) `_organize_sf_slots`)
+  - 예약 = 해당 타임 예약 건수 (확정 예약 + 수기 entry), 사용 = 그 중 노쇼가 아닌 건수
+  - 한 타임에 분류가 여러 개면 `일반/쿼터`, `2/1`, `2/1` 형태로 표기
+  - entry 우선 정책 유지 (같은 구장·시작시간에 수기 entry가 있으면 크롤링 예약 무시)
+  - 합계 열: 야구장 1~3타임 행에 각각 일반(쿼터 외 전부) / 쿼터 / 계
+- **타임 구분 변경** — 단일 정의 [sportsfield/slots.py](sportsfield/slots.py)로 통합
+  - 축구장·테니스장: 3타임 → 4타임 (10~12, 12~14, 14~16, 16~18)
+  - 야구장: 2타임 → 3타임 (09~12, 12~15, 15~18)
+- **HWPX** ([reports/hwpx_report.py](reports/hwpx_report.py) `_reshape_sf_table`)
+  - base는 sample4 유지 (사진 단락·글꼴 구성 때문), 스포츠필드 표만 코드로 sample5 구조(11행)로 재구성
+  - 복제한 중간 행은 합계 열 파란 굵은 아래선이 생기지 않도록 borderFill 사본을 header에 추가
+  - 열 이름 `입장` → `사용` (PDF 템플릿도 동일)
+- **스포츠필드 입력 화면**
+  - 수기 등록 시 성인/유소년 인원 입력 제거
+  - 이용 처리: 인원 입력 → `사용 / 노쇼` 선택 + 메모
+
+### 핵심 코드
+```python
+# reports/views.py
+def _sf_format_counts(items):
+    counts = {}
+    for _, _, cat, noshow in items:
+        res, act = counts.get(cat, (0, 0))
+        counts[cat] = (res + 1, act + (0 if noshow else 1))
+    cats = sorted(counts, key=...)  # 일반, 쿼터, 행사, 기타 순
+    return {'cat': '/'.join(라벨), 'reserved': '/'.join(예약), 'actual': '/'.join(사용)}
+```
+
+---
+
 ## [1.2.2] - 2026-09-09
 
 ### 변경

@@ -46,7 +46,7 @@
     <span class="d-flex align-items-center gap-1"><span class="legend-box other-box"></span> 기타</span>
     <span class="d-flex align-items-center gap-1 ms-2">
         <i class="bi bi-pencil-square text-primary" style="font-size:0.85rem"></i>
-        <span class="text-muted">항목 클릭 → 실제 이용인원 입력</span>
+        <span class="text-muted">항목 클릭 → 사용 / 노쇼 처리</span>
     </span>
 </div>
 
@@ -87,10 +87,10 @@
                 {% for item in items %}
                 <div class="sf-item mb-1 usage-trigger
                      {% if item.is_noshow %}noshow-item{% else %}cat-{{ item.category }}{% endif %}
-                     {% if item.actual_adult is not None or item.actual_child is not None or item.is_noshow %}has-usage{% endif %}"
+                     {% if item.is_noshow %}has-usage{% endif %}"
                      {% if item.rv_no %}data-rv-no="{{ item.rv_no }}"{% endif %}
                      {% if item.entry_id %}data-entry-id="{{ item.entry_id }}"{% endif %}
-                     title="클릭하여 실제 이용인원 입력">
+                     title="클릭하여 사용 / 노쇼 처리">
                     <div class="sf-item-inner">
                         {% if item.time_start %}
                         <span class="sf-time">{{ item.time_start|time:"H:i" }}~{{ item.time_end|time:"H:i" }}</span>
@@ -98,10 +98,6 @@
                         <span class="sf-title">{{ item.title }}</span>
                         {% if item.is_noshow %}
                         <span class="noshow-badge">노쇼</span>
-                        {% elif item.actual_adult is not None or item.actual_child is not None %}
-                        <span class="usage-badge">
-                            성인 {{ item.actual_adult|default:0 }} / 유소년 {{ item.actual_child|default:0 }}
-                        </span>
                         {% else %}
                         <span class="usage-empty"><i class="bi bi-pencil"></i></span>
                         {% endif %}
@@ -127,7 +123,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-pencil-square"></i> 실제 이용인원 입력</h5>
+                <h5 class="modal-title"><i class="bi bi-pencil-square"></i> 사용 / 노쇼 처리</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="usageModalBody">
@@ -204,7 +200,6 @@ function buildModalBody(data) {
         infoRows += `<div class="info-label">시간</div><div class="info-value">${data.time}</div>`;
     }
 
-    let reservedHint = '';
     if (data.type === 'normal') {
         infoRows += `<div class="info-label">예약자</div><div class="info-value">${data.name}</div>`;
         if (data.organization) {
@@ -213,10 +208,6 @@ function buildModalBody(data) {
         const adultRes = data.adult_count != null ? data.adult_count : '-';
         const childRes = data.child_count != null ? data.child_count : '-';
         infoRows += `<div class="info-label">예약인원</div><div class="info-value">성인 ${adultRes}명 / 유소년 ${childRes}명</div>`;
-        if (data.adult_count != null) reservedHint = `예약 ${data.adult_count}명`;
-        const childHint = data.child_count != null ? `예약 ${data.child_count}명` : '';
-        reservedHint = { adult: data.adult_count != null ? `예약 ${data.adult_count}명` : '',
-                         child: data.child_count != null ? `예약 ${data.child_count}명` : '' };
     } else {
         infoRows += `<div class="info-label">내용</div><div class="info-value">${data.title}</div>`;
         infoRows += `<div class="info-label">구분</div><div class="info-value">${data.category}</div>`;
@@ -225,42 +216,23 @@ function buildModalBody(data) {
             const rc = data.reserved_child_count != null ? data.reserved_child_count : '-';
             infoRows += `<div class="info-label">예약인원</div><div class="info-value">성인 ${ra}명 / 유소년 ${rc}명</div>`;
         }
-        reservedHint = {
-            adult: data.reserved_adult_count != null ? `예약 ${data.reserved_adult_count}명` : '',
-            child: data.reserved_child_count != null ? `예약 ${data.reserved_child_count}명` : '',
-        };
     }
 
-    const adultVal = data.actual_adult_count != null ? data.actual_adult_count : '';
-    const childVal = data.actual_child_count != null ? data.actual_child_count : '';
-    const adultHint = reservedHint.adult ? `<span class="reserved-info">(${reservedHint.adult})</span>` : '';
-    const childHint = reservedHint.child ? `<span class="reserved-info">(${reservedHint.child})</span>` : '';
-
-    const noshowChecked = data.is_noshow ? 'checked' : '';
+    const used = !data.is_noshow;
     return `
         <div class="info-grid">${infoRows}</div>
         <div class="usage-input-section">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="label mb-0"><i class="bi bi-person-check"></i> 실제 이용인원</span>
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <span class="label mb-0"><i class="bi bi-check2-square"></i> 이용 여부</span>
                 <div class="form-check form-check-inline mb-0">
-                    <input class="form-check-input" type="checkbox" id="u_noshow" ${noshowChecked}>
+                    <input class="form-check-input" type="radio" name="u_status" id="u_used" value="used" ${used ? 'checked' : ''}>
+                    <label class="form-check-label fw-semibold" for="u_used" style="font-size:0.85rem">사용</label>
+                </div>
+                <div class="form-check form-check-inline mb-0">
+                    <input class="form-check-input" type="radio" name="u_status" id="u_noshow" value="noshow" ${used ? '' : 'checked'}>
                     <label class="form-check-label text-danger fw-semibold" for="u_noshow" style="font-size:0.85rem">
                         <i class="bi bi-x-circle"></i> 노쇼
                     </label>
-                </div>
-            </div>
-            <div id="u_count_section" ${data.is_noshow ? 'style="opacity:0.4;pointer-events:none"' : ''}>
-                <div class="usage-row">
-                    <span class="u-label">성인</span>
-                    <input type="number" id="u_adult" class="form-control form-control-sm" min="0" value="${adultVal}" placeholder="0">
-                    <span class="u-unit">명</span>
-                    ${adultHint}
-                </div>
-                <div class="usage-row">
-                    <span class="u-label">유소년</span>
-                    <input type="number" id="u_child" class="form-control form-control-sm" min="0" value="${childVal}" placeholder="0">
-                    <span class="u-unit">명</span>
-                    ${childHint}
                 </div>
             </div>
             <div class="mt-2">
@@ -290,16 +262,6 @@ document.addEventListener('click', (ev) => {
         .then(r => r.json())
         .then(data => {
             document.getElementById('usageModalBody').innerHTML = buildModalBody(data);
-            document.getElementById('u_noshow').addEventListener('change', function () {
-                const section = document.getElementById('u_count_section');
-                if (this.checked) {
-                    section.style.opacity = '0.4';
-                    section.style.pointerEvents = 'none';
-                } else {
-                    section.style.opacity = '';
-                    section.style.pointerEvents = '';
-                }
-            });
         })
         .catch(() => {
             document.getElementById('usageModalBody').innerHTML = '<p class="text-danger">불러오기 실패</p>';
@@ -307,8 +269,6 @@ document.addEventListener('click', (ev) => {
 });
 
 document.getElementById('usageSaveBtn').addEventListener('click', () => {
-    const adultVal  = document.getElementById('u_adult')?.value ?? '';
-    const childVal  = document.getElementById('u_child')?.value ?? '';
     const isNoshow  = document.getElementById('u_noshow')?.checked ? '1' : '0';
     const memoVal   = document.getElementById('u_memo')?.value ?? '';
     if (!document.getElementById('u_noshow')) return;
@@ -320,7 +280,7 @@ document.getElementById('usageSaveBtn').addEventListener('click', () => {
     fetch(url, {
         method: 'POST',
         headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ actual_adult: adultVal, actual_child: childVal, is_noshow: isNoshow, usage_memo: memoVal }).toString(),
+        body: new URLSearchParams({ is_noshow: isNoshow, usage_memo: memoVal }).toString(),
     })
     .then(r => r.json())
     .then(data => {

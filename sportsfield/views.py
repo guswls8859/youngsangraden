@@ -10,28 +10,7 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from .models import FIELD_CHOICES, Reservation, SportsfieldEntry
-
-TIME_SLOTS = {
-    'soccer': [
-        ('10:00', '12:00', '1타임 (10:00~12:00)'),
-        ('13:00', '15:00', '2타임 (13:00~15:00)'),
-        ('15:30', '17:30', '3타임 (15:30~17:30)'),
-    ],
-    'baseball': [
-        ('10:00', '14:00', '1타임 (10:00~14:00)'),
-        ('14:00', '18:00', '2타임 (14:00~18:00)'),
-    ],
-    'tennis_grass': [
-        ('10:00', '12:00', '1타임 (10:00~12:00)'),
-        ('13:00', '15:00', '2타임 (13:00~15:00)'),
-        ('15:30', '17:30', '3타임 (15:30~17:30)'),
-    ],
-    'tennis_hard': [
-        ('10:00', '12:00', '1타임 (10:00~12:00)'),
-        ('13:00', '15:00', '2타임 (13:00~15:00)'),
-        ('15:30', '17:30', '3타임 (15:30~17:30)'),
-    ],
-}
+from .slots import TIME_SLOTS
 
 
 class SportsfieldAccessMixin(LoginRequiredMixin):
@@ -341,8 +320,6 @@ class EntryCreateView(SportsfieldAccessMixin, View):
             title=title,
             category=category,
             author=request.user,
-            reserved_adult_count=_parse_actual_count(request.POST.get('actual_adult')),
-            reserved_child_count=_parse_actual_count(request.POST.get('actual_child')),
         )
         return JsonResponse({'ok': True})
 
@@ -385,20 +362,18 @@ class ReservationUpdateView(SportsfieldAccessMixin, View):
 class ReservationUsageUpdateView(SportsfieldAccessMixin, View):
     def post(self, request, rv_no):
         r = get_object_or_404(Reservation, rv_no=rv_no)
-        r.actual_adult_count = _parse_actual_count(request.POST.get('actual_adult'))
-        r.actual_child_count = _parse_actual_count(request.POST.get('actual_child'))
+        # 2026-11-10~ 건별 집계: 인원 입력 없이 사용/노쇼만 기록
         r.is_noshow = request.POST.get('is_noshow') == '1'
         r.usage_memo = request.POST.get('usage_memo', '').strip()
-        r.save(update_fields=['actual_adult_count', 'actual_child_count', 'is_noshow', 'usage_memo'])
+        r.save(update_fields=['is_noshow', 'usage_memo'])
         return JsonResponse({'ok': True})
 
 
 class EntryUsageUpdateView(SportsfieldAccessMixin, View):
     def post(self, request, pk):
         e = get_object_or_404(SportsfieldEntry, pk=pk)
-        e.actual_adult_count = _parse_actual_count(request.POST.get('actual_adult'))
-        e.actual_child_count = _parse_actual_count(request.POST.get('actual_child'))
+        # 2026-11-10~ 건별 집계: 인원 입력 없이 사용/노쇼만 기록
         e.is_noshow = request.POST.get('is_noshow') == '1'
         e.usage_memo = request.POST.get('usage_memo', '').strip()
-        e.save(update_fields=['actual_adult_count', 'actual_child_count', 'is_noshow', 'usage_memo'])
+        e.save(update_fields=['is_noshow', 'usage_memo'])
         return JsonResponse({'ok': True})

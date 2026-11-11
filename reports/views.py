@@ -1360,156 +1360,100 @@ def integrated_daily_excel(request):
     return response
 
 
-def _sf_slot(sf_reservations, sf_entries, field_types, start_time):
-    """구장/시작시간으로 매칭되는 모든 entry + reservation의 인원을 합산해서 반환.
+# ── 스포츠필드 건별 집계 (2026-11-10~, sample5 양식) ─────────────────────────
+#   예약 = 해당 타임의 예약 건수 (확정 예약 + 수기 entry)
+#   사용 = 그 중 노쇼가 아닌 건수
+#   분류가 여러 개면 '일반/쿼터', '2/1', '2/1' 형태로 표기
+_SF_CAT_ORDER = ['normal', 'quarter', 'event', 'other']
+_SF_CAT_LABEL = {'normal': '일반', 'quarter': '쿼터', 'event': '행사', 'other': '기타'}
 
-    - 같은 슬롯에 여러 예약(예: 테니스 코트에 4건 동시)이 있으면 모두 합산.
-    - tennis처럼 field_types가 여러 개(['tennis_grass','tennis_hard'])면 두 코트도 합산.
-    - entry(수기)가 있으면 그 슬롯의 reservation은 무시 (entry가 우선).
+
+def _sf_items(sf_reservations, sf_entries):
+    """(field_type, time_start, category, is_noshow) 목록.
+
+    같은 (구장, 시작시간)에 수기 entry가 있으면 그 슬롯의 크롤링 예약은 무시한다 (entry 우선).
+    크롤링 예약의 분류는 '일반'.
     """
-    CAT = {'normal': '일반', 'quarter': '쿼터', 'event': '행사', 'other': '기타'}
+    entry_keys = {(e.field_type, e.time_start) for e in sf_entries}
+    items = [(e.field_type, e.time_start, e.category, e.is_noshow) for e in sf_entries]
+    items += [
+        (r.field_type, r.time_start, 'normal', r.is_noshow)
+        for r in sf_reservations
+        if (r.field_type, r.time_start) not in entry_keys
+    ]
+    return items
+
+
+def _sf_format_counts(items):
+    """items의 분류별 예약/사용 건수를 표 셀 값으로 만든다. 없으면 모두 None."""
+    if not items:
+        return {'cat': None, 'reserved': None, 'actual': None}
+    counts = {}
+    for _, _, cat, noshow in items:
+        res, act = counts.get(cat, (0, 0))
+        counts[cat] = (res + 1, act + (0 if noshow else 1))
+    cats = sorted(counts, key=lambda c: _SF_CAT_ORDER.index(c) if c in _SF_CAT_ORDER else 99)
+    return {
+        'cat':      '/'.join(_SF_CAT_LABEL.get(c, c) for c in cats),
+        'reserved': '/'.join(str(counts[c][0]) for c in cats),
+        'actual':   '/'.join(str(counts[c][1]) for c in cats),
+    }
+
+
+def _sf_slot(items, field_types, start_time):
+    """구장(들)·시작시간에 해당하는 건수. tennis는 잔디+하드 합산."""
     if isinstance(field_types, str):
         field_types = [field_types]
+    return _sf_format_counts([
+        it for it in items if it[0] in field_types and it[1] == start_time
+    ])
 
-    matched_entries = [
-        e for e in sf_entries
-        if e.field_type in field_types and e.time_start == start_time
-    ]
-    entry_keys = {(e.field_type, e.time_start) for e in matched_entries}
-    remaining_reservations = [
-        r for r in sf_reservations
-        if r.field_type in field_types and r.time_start == start_time
-           and (r.field_type, r.time_start) not in entry_keys
-    ]
 
-    if not matched_entries and not remaining_reservations:
-        return {'cat': None, 'reserved': None, 'actual': None}
-
-    # 예약인원 합계
-    res_sum, res_has = 0, False
-    for e in matched_entries:
-        if e.reserved_adult_count is not None or e.reserved_child_count is not None:
-            res_sum += (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
-            res_has = True
-        else:
-            # entry에 reserved 없으면 같은 (field,time)의 reservation total_users로 fallback
-            for r in sf_reservations:
-                if r.field_type == e.field_type and r.time_start == e.time_start and r.total_users:
-                    res_sum += r.total_users
-                    res_has = True
-                    break
-    for r in remaining_reservations:
-        if r.total_users:
-            res_sum += r.total_users
-            res_has = True
-
-    # 입장인원 합계 (성인+어린이)
-    act_sum, act_has = 0, False
-    for e in matched_entries:
-        if e.actual_adult_count is not None or e.actual_child_count is not None:
-            act_sum += (e.actual_adult_count or 0) + (e.actual_child_count or 0)
-            act_has = True
-    for r in remaining_reservations:
-        if r.actual_adult_count is not None or r.actual_child_count is not None:
-            act_sum += (r.actual_adult_count or 0) + (r.actual_child_count or 0)
-            act_has = True
-
-    # cat 라벨: entry 첫 매치 우선, 없으면 '일반'
-    if matched_entries:
-        cat = CAT.get(matched_entries[0].category, matched_entries[0].category)
+def _sf_day_total(items, cat_filter):
+    """하루 전체(모든 구장) 합계. cat_filter: 'normal'(쿼터 외 전부) / 'quarter' / None(전체)."""
+    if cat_filter == 'quarter':
+        sel = [it for it in items if it[2] == 'quarter']
+    elif cat_filter == 'normal':
+        sel = [it for it in items if it[2] != 'quarter']
     else:
-        cat = '일반'
-
-    return {
-        'cat':      cat,
-        'reserved': res_sum if res_has else None,
-        'actual':   act_sum if act_has else None,
-    }
+        sel = items
+    reserved = len(sel)
+    actual = sum(1 for it in sel if not it[3])
+    return {'reserved': reserved or None, 'actual': actual if reserved else None}
 
 
-def _sf_day_total_by_cat(sf_reservations, sf_entries, cat):
-    """하루 전체 모든 구장의 분류별(일반/쿼터) 합계를 반환한다."""
-    total_res = 0
-    total_act = 0
-
-    # 쿼터 entry 키 (field_type, time_start) 집합
-    quarter_keys = {(e.field_type, e.time_start) for e in sf_entries if e.category == 'quarter'}
-    # entry가 있는 키 집합
-    entry_keys = {(e.field_type, e.time_start) for e in sf_entries}
-
-    if cat == '쿼터':
-        for e in sf_entries:
-            if e.category == 'quarter':
-                # 예약인원: entry의 reserved_* 우선, 없으면 매칭 Reservation
-                if e.reserved_adult_count is not None or e.reserved_child_count is not None:
-                    total_res += (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
-                else:
-                    rv = next((r for r in sf_reservations
-                               if r.field_type == e.field_type and r.time_start == e.time_start), None)
-                    total_res += rv.total_users or 0 if rv else 0
-                # 입장인원
-                total_act += (e.actual_adult_count or 0) + (e.actual_child_count or 0)
-    else:  # 일반
-        for e in sf_entries:
-            if e.category != 'quarter':
-                if e.reserved_adult_count is not None or e.reserved_child_count is not None:
-                    total_res += (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
-                total_act += (e.actual_adult_count or 0) + (e.actual_child_count or 0)
-        for r in sf_reservations:
-            if (r.field_type, r.time_start) not in quarter_keys:
-                if (r.field_type, r.time_start) not in entry_keys:
-                    # entry 없는 일반 예약: reservation 기준 (성인+어린이 합산)
-                    total_res += r.total_users or 0
-                    total_act += (r.actual_adult_count or 0) + (r.actual_child_count or 0)
-
-    return {
-        'cat':      cat,
-        'reserved': total_res or None,
-        'actual':   total_act or None,
-    }
-
-
-# 합계 행 분류 고정: 1타임=일반, 2타임=쿼터
-_BB_TOTAL_CATS = ['일반', '쿼터']
+# 합계 열: 야구장 행 순서대로 일반 / 쿼터 / 계
+_SF_TOTAL_ROWS = [('일반', 'normal'), ('쿼터', 'quarter'), ('계', None)]
 
 
 def _organize_sf_slots(sf_reservations, sf_entries):
     """스포츠필드 예약/이용 데이터를 구장·타임별 구조로 정리한다."""
-    import datetime as dt
+    from sportsfield.slots import SLOT_GROUPS, slot_label
 
-    # 축구장·테니스장 공통 3타임
-    ST = [
-        {'label': '1타임 (10:00~12:00)', 'start': dt.time(10, 0),  'end': dt.time(12, 0)},
-        {'label': '2타임 (13:00~15:00)', 'start': dt.time(13, 0),  'end': dt.time(15, 0)},
-        {'label': '3타임 (15:30~17:30)', 'start': dt.time(15, 30), 'end': dt.time(17, 30)},
-    ]
-    # 야구장 2타임
-    BB = [
-        {'label': '1타임 (10:00~14:00)', 'start': dt.time(10, 0), 'end': dt.time(14, 0)},
-        {'label': '2타임 (14:00~18:00)', 'start': dt.time(14, 0), 'end': dt.time(18, 0)},
-    ]
+    def _t(hhmm):
+        return datetime.time.fromisoformat(hhmm)
+
+    items = _sf_items(sf_reservations, sf_entries)
 
     st_rows = [
         {
-            'label':  s['label'],
-            'soccer': _sf_slot(sf_reservations, sf_entries, 'soccer', s['start']),
-            'tennis': _sf_slot(sf_reservations, sf_entries,
-                               ['tennis_grass', 'tennis_hard'], s['start']),
+            'label':  slot_label(i, s, e),
+            'soccer': _sf_slot(items, 'soccer', _t(s)),
+            'tennis': _sf_slot(items, ['tennis_grass', 'tennis_hard'], _t(s)),
         }
-        for s in ST
+        for i, (s, e) in enumerate(SLOT_GROUPS['soccer'])
     ]
-    # 합계는 하루 전체 기준으로 분류별 집계 (1타임=일반, 2타임=쿼터)
-    day_totals = {cat: _sf_day_total_by_cat(sf_reservations, sf_entries, cat)
-                  for cat in _BB_TOTAL_CATS}
-
-    bb_rows = [
-        {
-            'label':    s['label'],
-            'baseball': _sf_slot(sf_reservations, sf_entries, 'baseball', s['start']),
-            'total':    day_totals[_BB_TOTAL_CATS[i]],
-        }
-        for i, s in enumerate(BB)
-    ]
+    bb_rows = []
+    for i, (s, e) in enumerate(SLOT_GROUPS['baseball']):
+        total = {'cat': None, 'reserved': None, 'actual': None}
+        if i < len(_SF_TOTAL_ROWS):
+            label, cat_filter = _SF_TOTAL_ROWS[i]
+            total = {'cat': label, **_sf_day_total(items, cat_filter)}
+        bb_rows.append({
+            'label':    slot_label(i, s, e),
+            'baseball': _sf_slot(items, 'baseball', _t(s)),
+            'total':    total,
+        })
     return {'st_rows': st_rows, 'bb_rows': bb_rows}
 
 

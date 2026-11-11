@@ -176,6 +176,117 @@ def _find_main_table(sec_root):
     raise ValueError("section0.xml에서 메인 테이블을 찾을 수 없습니다.")
 
 
+# ── 스포츠필드 표 재구성 (sample4 → sample5 양식) ─────────────────────────
+# sample4 표: 헤더2 + 축구·테니스 3행 + 헤더2 + 야구·합계 2행
+# sample5 표: 헤더2 + 축구·테니스 4행 + 헤더2 + 야구·합계 3행, 열 이름 '입장'→'사용'
+# 사진 단락/글꼴 구성이 sample4 기준이라 base는 sample4로 두고 이 표만 코드로 맞춘다.
+_SF_ST_DATA = slice(2, 5)
+_SF_BB_HDR  = slice(5, 7)
+_SF_BB_DATA = slice(7, 9)
+
+
+def _mid_borderfill(header_xml, src_id, cache):
+    """src_id borderFill의 아래 테두리를 위 테두리와 같게 바꾼 사본을 header에 추가한다.
+
+    표의 마지막 행을 복제해 중간 행으로 쓸 때, 합계 열의 파란 굵은 아래선이
+    중간에 생기지 않도록 하기 위함. 위/아래가 이미 같으면 src_id를 그대로 쓴다.
+    반환: (header_xml, 사용할 id)
+    """
+    import re
+    if src_id in cache:
+        return header_xml, cache[src_id]
+    m = re.search(r'<hh:borderFill id="%s"[^>]*>.*?</hh:borderFill>' % re.escape(src_id),
+                  header_xml, re.S)
+    if not m:
+        cache[src_id] = src_id
+        return header_xml, src_id
+    bf = m.group(0)
+    top = re.search(r'<hh:topBorder ([^/]*)/>', bf)
+    bottom = re.search(r'<hh:bottomBorder ([^/]*)/>', bf)
+    if not top or not bottom or top.group(1) == bottom.group(1):
+        cache[src_id] = src_id
+        return header_xml, src_id
+    ids = [int(x) for x in re.findall(r'<hh:borderFill id="(\d+)"', header_xml)]
+    new_id = str(max(ids) + 1)
+    new_bf = bf.replace(bottom.group(0), f'<hh:bottomBorder {top.group(1)}/>', 1)
+    new_bf = re.sub(r'id="%s"' % re.escape(src_id), f'id="{new_id}"', new_bf, count=1)
+    close = '</hh:borderFills>'
+    header_xml = header_xml.replace(close, new_bf + close, 1)
+    header_xml = re.sub(r'(<hh:borderFills itemCnt=")(\d+)(")',
+                        lambda mm: f'{mm.group(1)}{int(mm.group(2)) + 1}{mm.group(3)}',
+                        header_xml, count=1)
+    cache[src_id] = new_id
+    return header_xml, new_id
+
+
+def _reshape_sf_table(tbl, outer_cell, n_st, n_bb, header_xml):
+    """스포츠필드 중첩 표의 데이터 행 수를 n_st / n_bb로 맞추고 헤더를 '사용'으로 바꾼다.
+
+    반환: (header_xml, st 데이터 행 list, bb 데이터 행 list)
+    """
+    from copy import deepcopy
+    rows = tbl.findall('hp:tr', NS)
+    if len(rows) != 9:  # 이미 다른 구조면 손대지 않음
+        return header_xml, rows[2:2 + n_st], rows[-n_bb:]
+    st_data, bb_hdr, bb_data = rows[_SF_ST_DATA], rows[_SF_BB_HDR], rows[_SF_BB_DATA]
+    row_h = int(st_data[0].find('hp:tc/hp:cellSz', NS).get('height'))
+    cache = {}
+    delta = 0
+
+    def _fit(data, n):
+        nonlocal header_xml, delta
+        data = list(data)
+        # 늘리기: 마지막 행을 복제해 마지막 행 바로 앞에 삽입 (중간 행 스타일로 테두리 조정)
+        while len(data) < n:
+            new = deepcopy(data[-1])
+            for tc in new.findall('hp:tc', NS):
+                header_xml, nid = _mid_borderfill(header_xml, tc.get('borderFillIDRef'), cache)
+                tc.set('borderFillIDRef', nid)
+            tbl.insert(list(tbl).index(data[-1]), new)
+            data.insert(len(data) - 1, new)
+            delta += row_h
+        # 줄이기: 마지막 바로 앞 행부터 제거
+        while len(data) > max(n, 1):
+            victim = data.pop(-2 if len(data) >= 2 else -1)
+            tbl.remove(victim)
+            delta -= row_h
+        return data
+
+    st_data = _fit(st_data, n_st)
+    bb_data = _fit(bb_data, n_bb)
+
+    # rowAddr 재부여 + rowCnt / 높이 갱신
+    all_rows = tbl.findall('hp:tr', NS)
+    for r_i, tr in enumerate(all_rows):
+        for tc in tr.findall('hp:tc', NS):
+            addr = tc.find('hp:cellAddr', NS)
+            if addr is not None:
+                addr.set('rowAddr', str(r_i))
+    tbl.set('rowCnt', str(len(all_rows)))
+    sz = tbl.find('hp:sz', NS)
+    if sz is not None and delta:
+        sz.set('height', str(int(sz.get('height')) + delta))
+    # 표를 담은 단락의 줄 높이도 맞춰줌 (한글이 열 때 재계산하지만 미리보기용)
+    if delta:
+        for p in outer_cell.iter(f'{{{HP}}}p'):
+            if tbl in list(p.iter(f'{{{HP}}}tbl')):
+                for seg in p.findall('hp:linesegarray/hp:lineseg', NS):
+                    for k in ('vertsize', 'textheight'):
+                        if seg.get(k):
+                            seg.set(k, str(int(seg.get(k)) + delta))
+                    if seg.get('baseline'):
+                        seg.set('baseline', str(int(seg.get('baseline')) + int(delta * 0.85)))
+                break
+
+    # 헤더 '입장' → '사용'
+    for hdr_row in (rows[1], bb_hdr[1]):
+        for t in hdr_row.iter(f'{{{HP}}}t'):
+            if t.text and t.text.strip() == '입장':
+                t.text = '사용'
+
+    return header_xml, st_data, bb_data
+
+
 # ── 행사 표 템플릿 (sample2 row13 cell1의 nested 테이블) ───────────────────
 def _load_event_template():
     """sample2에서 (행사명 단락, 4열 nested 테이블) 템플릿을 가져온다."""
@@ -404,15 +515,18 @@ def build_integrated_daily_hwpx(
 
     st_rows = (sf_slots or {}).get('st_rows', [])
     bb_rows = (sf_slots or {}).get('bb_rows', [])
-    while len(st_rows) < 3:
-        st_rows.append({'label': '', 'soccer': {}, 'tennis': {}})
-    while len(bb_rows) < 2:
-        bb_rows.append({'label': '', 'baseball': {}, 'total': {}})
+    if not st_rows or not bb_rows:
+        from sportsfield.slots import SLOT_GROUPS, slot_label
+        st_rows = st_rows or [{'label': slot_label(i, s, e), 'soccer': {}, 'tennis': {}}
+                              for i, (s, e) in enumerate(SLOT_GROUPS['soccer'])]
+        bb_rows = bb_rows or [{'label': slot_label(i, s, e), 'baseball': {}, 'total': {}}
+                              for i, (s, e) in enumerate(SLOT_GROUPS['baseball'])]
 
     # 2. 기반 HWPX: sample4 (통합판 — 방문현황 4열 + 사진 단락 포함)
     src_path = BASE_HWPX  # sample4
     with zipfile.ZipFile(src_path, 'r') as zin:
         sec0_bytes = zin.read('Contents/section0.xml')
+        header_xml = zin.read('Contents/header.xml').decode('utf-8')
 
     root = ET.fromstring(sec0_bytes)
 
@@ -490,37 +604,34 @@ def build_integrated_daily_hwpx(
     cells_r9 = rows[9].findall('hp:tc', NS)
     inner_stbl = cells_r9[1].find('.//hp:tbl', NS)
     if inner_stbl is not None:
-        s_rows = inner_stbl.findall('hp:tr', NS)
-        # 축구장·테니스장 (s_rows[2], [3], [4])
-        for i, sr in enumerate(st_rows):
-            if 2 + i >= len(s_rows):
-                break
-            #작업중임
-            dc = s_rows[2 + i].findall('hp:tc', NS)
+        header_xml, st_trs, bb_trs = _reshape_sf_table(
+            inner_stbl, cells_r9[1], len(st_rows), len(bb_rows), header_xml)
+        # 축구장·테니스장
+        for sr, tr in zip(st_rows, st_trs):
+            dc = tr.findall('hp:tc', NS)
             if len(dc) < 7:
                 continue
             soccer = sr.get('soccer') or {}
             tennis = sr.get('tennis') or {}
+            _set_t(dc[0], sr.get('label', ''))
             _set_t(dc[1], _sf_val(soccer, 'cat'))
             _set_t(dc[2], _sf_val(soccer, 'reserved'))
             _set_t(dc[3], _sf_val(soccer, 'actual'))
             _set_t(dc[4], _sf_val(tennis, 'cat'))
             _set_t(dc[5], _sf_val(tennis, 'reserved'))
             _set_t(dc[6], _sf_val(tennis, 'actual'))
-        # 야구장·합계 (s_rows[7], [8]) — 합계 분류는 1타임=일반, 2타임=쿼터 고정
-        _TOTAL_CAT_LABELS = ['일반', '쿼터']
-        for i, br in enumerate(bb_rows):
-            if 7 + i >= len(s_rows):
-                break
-            dc = s_rows[7 + i].findall('hp:tc', NS)
+        # 야구장·합계 (합계 분류 라벨은 bb_rows[i]['total']['cat']: 일반/쿼터/계)
+        for br, tr in zip(bb_rows, bb_trs):
+            dc = tr.findall('hp:tc', NS)
             if len(dc) < 7:
                 continue
             baseball = br.get('baseball') or {}
             total    = br.get('total') or {}
+            _set_t(dc[0], br.get('label', ''))
             _set_t(dc[1], _sf_val(baseball, 'cat'))
             _set_t(dc[2], _sf_val(baseball, 'reserved'))
             _set_t(dc[3], _sf_val(baseball, 'actual'))
-            _set_t(dc[4], _TOTAL_CAT_LABELS[i])          # 고정 라벨
+            _set_t(dc[4], _sf_val(total, 'cat'))
             _set_t(dc[5], _sf_val(total, 'reserved'))
             _set_t(dc[6], _sf_val(total, 'actual'))
 
@@ -651,6 +762,8 @@ def build_integrated_daily_hwpx(
                     continue  # sample4 원본 이미지 항상 스킵
                 if item.filename == 'Contents/section0.xml':
                     zout.writestr(item, sec0_new)
+                elif item.filename == 'Contents/header.xml':
+                    zout.writestr(item, header_xml.encode('utf-8'))
                 elif item.filename == 'Contents/content.hpf':
                     hpf_xml = zin.read(item.filename).decode('utf-8')
                     # 원본 이미지 manifest 항목 항상 제거

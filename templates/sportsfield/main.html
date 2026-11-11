@@ -177,16 +177,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="row g-2 mb-1">
-                    <div class="col-6">
-                        <label class="form-label fw-semibold">성인 인원 <span class="text-muted small fw-normal">(선택)</span></label>
-                        <input type="number" id="m_adult" class="form-control" min="0" placeholder="0">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label fw-semibold">유소년 인원 <span class="text-muted small fw-normal">(선택)</span></label>
-                        <input type="number" id="m_child" class="form-control" min="0" placeholder="0">
-                    </div>
-                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
@@ -286,8 +276,6 @@ document.addEventListener('click', (ev) => {
 
     fillTimeSlots(fieldKey);
     document.getElementById('m_title').value = '';
-    document.getElementById('m_adult').value = '';
-    document.getElementById('m_child').value = '';
     document.querySelector('input[name="m_cat"][value="normal"]').checked = true;
 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('addModal')).show();
@@ -300,8 +288,6 @@ document.getElementById('m_saveBtn').addEventListener('click', () => {
     const timeSlot = document.getElementById('m_time_slot').value;
     const title    = document.getElementById('m_title').value.trim();
     const cat      = document.querySelector('input[name="m_cat"]:checked')?.value;
-    const adult    = document.getElementById('m_adult').value;
-    const child    = document.getElementById('m_child').value;
 
     if (!timeSlot) { alert('타임을 선택해주세요.'); return; }
     if (!title)    { alert('제목 / 내용을 입력해주세요.'); return; }
@@ -309,8 +295,7 @@ document.getElementById('m_saveBtn').addEventListener('click', () => {
     fetch(CREATE_URL, {
         method: 'POST',
         headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ field_type: field, entry_date: dt, time_slot: timeSlot, title, category: cat,
-                                    actual_adult: adult, actual_child: child }).toString(),
+        body: new URLSearchParams({ field_type: field, entry_date: dt, time_slot: timeSlot, title, category: cat }).toString(),
     })
     .then(r => r.json())
     .then(data => { if (data.ok) location.reload(); else alert('오류: ' + data.message); });
@@ -342,10 +327,6 @@ function renderDetail(data) {
     } else {
         _currentDetailData = null;
         titleEl.textContent = `${data.category} - ${data.title}`;
-        const resAdult = data.reserved_adult_count != null ? `${data.reserved_adult_count}명` : '-';
-        const resChild = data.reserved_child_count != null ? `${data.reserved_child_count}명` : '-';
-        const actAdult = data.actual_adult_count  != null ? `${data.actual_adult_count}명`  : '-';
-        const actChild = data.actual_child_count  != null ? `${data.actual_child_count}명`  : '-';
         const rows = [
             ['구장',           data.field],
             ['날짜',           data.date],
@@ -353,11 +334,6 @@ function renderDetail(data) {
             ['내용',           data.title],
             ['구분',           data.category],
             ['작성자',         data.author],
-            ['예약 성인',      resAdult],
-            ['예약 유소년',    resChild],
-            // 나중에 만약 이것도 한번에 보고 싶다 하면 주석 해제
-            // ['입장 성인',      actAdult],
-            // ['입장 유소년',    actChild],
         ];
         bodyEl.innerHTML = rows.map(([l, v]) =>
             `<div class="detail-row"><span class="detail-label">${l}</span><span class="detail-value">${v}</span></div>`
