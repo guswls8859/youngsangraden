@@ -6,6 +6,18 @@
 
 ---
 
+## [1.5.0] - 2026-11-12
+
+### 추가 — 운영사무국 "프로그램 예약" 조회 페이지
+- 예약 API를 `kind=program` 으로 호출해 프로그램·행사 예약 현황을 보는 페이지 신설 (조회 전용, DB 저장 안 함)
+- 운영사무국 상단 버튼 바에 "프로그램 예약" 버튼 추가 ([templates/reports/task_calendar.html](templates/reports/task_calendar.html))
+- 월 단위 조회(이전/다음 달 이동), 요약(전체/확정/노쇼/프로그램 종류), 상태 필터 + 프로그램·예약자 검색 ([templates/reports/program_reservations.html](templates/reports/program_reservations.html))
+- `OperationsAccessMixin` 으로 운영사무국만 접근, API 실패 시 안내 표시
+- API 클라이언트에 `kind` 파라미터 일반화 + `fetch_program_rows()` 추가 ([sportsfield/reservation_api.py](sportsfield/reservation_api.py))
+- URL: `reports/programs/` (`reports:program_reservations`)
+
+---
+
 ## [1.4.4] - 2026-11-12
 
 ### 변경 — 예약 자동수집을 업무시간 집중(3분)으로 ([reports/scheduler.py](reports/scheduler.py))

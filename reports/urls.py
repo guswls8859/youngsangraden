@@ -43,6 +43,7 @@ urlpatterns = [
     path('ladder/<int:pk>/reveal/', views.ladder_reveal, name='ladder_reveal'),
     path('ladder/<int:pk>/close/', views.ladder_close, name='ladder_close'),
     # 용산어린이정원 일일보고
+    path('programs/', views.ProgramReservationView.as_view(), name='program_reservations'),
     path('integrated/', views.IntegratedDailyReportView.as_view(), name='integrated_daily'),
     path('integrated/pdf/', views.integrated_daily_pdf, name='integrated_daily_pdf'),
     path('integrated/hwp/', views.integrated_daily_hwp, name='integrated_daily_hwp'),

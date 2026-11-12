@@ -135,14 +135,14 @@ def row_to_defaults(row):
 
 
 # ── HTTP ─────────────────────────────────────────────────────────────────────
-def _get_page(session, start_date, end_date, page, limit):
+def _get_page(session, start_date, end_date, page, limit, kind='sports'):
     key = getattr(settings, 'RESERVATION_API_KEY', '').strip()
     if not key:
         raise ReservationAPIError('RESERVATION_API_KEY 환경변수가 설정되지 않았습니다.')
     resp = session.get(
         API_URL,
         params={
-            'location': 'children', 'kind': 'sports',
+            'location': 'children', 'kind': kind,
             'start_date': start_date.isoformat(), 'end_date': end_date.isoformat(),
             'page': page, 'limit': limit,
         },
@@ -172,7 +172,7 @@ def _chunks(start_date, end_date, days):
         cur = end + dt.timedelta(days=1)
 
 
-def fetch_rows(start_date, end_date):
+def fetch_rows(start_date, end_date, kind='sports'):
     """기간 내 예약 전체를 가져온다. 반환: (rows, 호출 수, 경고 list)
 
     7일 구간별 1페이지를 병렬로 받은 뒤, pagination.total_page 까지 나머지 페이지도 병렬로 받는다.
@@ -186,14 +186,14 @@ def fetch_rows(start_date, end_date):
         adapter = requests.adapters.HTTPAdapter(pool_connections=MAX_WORKERS, pool_maxsize=MAX_WORKERS)
         session.mount('https://', adapter)
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-            firsts = list(ex.map(lambda c: _get_page(session, c[0], c[1], 1, PAGE_LIMIT), chunks))
+            firsts = list(ex.map(lambda c: _get_page(session, c[0], c[1], 1, PAGE_LIMIT, kind), chunks))
             rest = []
             for c, data in zip(chunks, firsts):
                 by_chunk[c].extend(data.get('data') or [])
                 pg = data.get('pagination') or {}
                 totals[c] = int(pg.get('total') or 0)
                 rest += [(c, p) for p in range(2, int(pg.get('total_page') or 0) + 1)]
-            pages = list(ex.map(lambda t: _get_page(session, t[0][0], t[0][1], t[1], PAGE_LIMIT), rest))
+            pages = list(ex.map(lambda t: _get_page(session, t[0][0], t[0][1], t[1], PAGE_LIMIT, kind), rest))
             for (c, _), data in zip(rest, pages):
                 by_chunk[c].extend(data.get('data') or [])
 
@@ -209,6 +209,17 @@ def fetch_rows(start_date, end_date):
         for row in by_chunk[c]:
             uniq[row.get('no')] = row
     return list(uniq.values()), len(chunks) + len(rest), warnings
+
+
+def fetch_program_rows(start_date, end_date):
+    """운영사무국 프로그램/행사 예약(kind=program) 원본 행을 가져온다.
+
+    스포츠필드와 달리 DB에 저장하지 않고 조회 전용. 테스트 데이터만 제외.
+    반환: (rows, 호출 수, 경고 list)
+    """
+    rows, n_requests, warnings = fetch_rows(start_date, end_date, kind='program')
+    rows = [r for r in rows if not is_test_program(r.get('program_name'))]
+    return rows, n_requests, warnings
 
 
 # ── DB 동기화 ────────────────────────────────────────────────────────────────

@@ -1013,6 +1013,77 @@ def _normalize_event_cols(raw):
     return {'headers': [], 'rows': []}
 
 
+class ProgramReservationView(OperationsAccessMixin, TemplateView):
+    """운영사무국 — 프로그램/행사 예약 현황 (예약 API kind=program, 조회 전용)."""
+    template_name = 'reports/program_reservations.html'
+
+    # reserv_status 빈 값 등 표시용
+    def _month_range(self):
+        today = timezone.localdate()
+        try:
+            year = int(self.request.GET.get('year', today.year))
+            month = int(self.request.GET.get('month', today.month))
+            if not (1 <= month <= 12):
+                raise ValueError
+        except (TypeError, ValueError):
+            year, month = today.year, today.month
+        start = datetime.date(year, month, 1)
+        nxt = (start + datetime.timedelta(days=32)).replace(day=1)
+        end = nxt - datetime.timedelta(days=1)
+        return year, month, start, end
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        year, month, start, end = self._month_range()
+        prev = (start - datetime.timedelta(days=1))
+        ctx.update({
+            'year': year, 'month': month,
+            'start': start, 'end': end,
+            'prev_year': prev.year, 'prev_month': prev.month,
+            'next_year': (end + datetime.timedelta(days=1)).year,
+            'next_month': (end + datetime.timedelta(days=1)).month,
+        })
+
+        from sportsfield.reservation_api import ReservationAPIError, fetch_program_rows
+        try:
+            rows, _n, _w = fetch_program_rows(start, end)
+        except ReservationAPIError as e:
+            ctx['api_error'] = str(e)
+            ctx['rows'] = []
+            ctx['summary'] = {}
+            return ctx
+
+        items = []
+        for r in rows:
+            status = (r.get('reserv_status') or '').strip() or '미지정'
+            items.append({
+                'program': r.get('program_name') or '',
+                'date': (r.get('reserv_day') or '')[:10],
+                'time': (r.get('reserv_time') or '').replace(' ', ''),
+                'name': r.get('name') or '',
+                'phone': r.get('phone') or '',
+                'people': r.get('total_people'),
+                'gubun': r.get('gubun') or '',
+                'amount': r.get('amount') or 0,
+                'pay_status': r.get('pay_status') or '',
+                'status': status,
+                'noshow': (r.get('noshow_status') or '').strip().upper() == 'O',
+                'no': r.get('reserve_code') or r.get('no'),
+            })
+        items.sort(key=lambda x: (x['date'], x['time'], x['program']))
+
+        from collections import Counter
+        ctx['rows'] = items
+        ctx['summary'] = {
+            'total': len(items),
+            'by_status': dict(Counter(i['status'] for i in items)),
+            'confirmed': sum(1 for i in items if i['status'] in ('예약확정', '예약완료')),
+            'noshow': sum(1 for i in items if i['noshow']),
+            'programs': dict(Counter(i['program'] for i in items)),
+        }
+        return ctx
+
+
 class IntegratedDailyReportView(OperationsAccessMixin, TemplateView):
     """날짜별 운영데이터 입력 + 미리보기 페이지"""
     template_name = 'reports/integrated_daily.html'
