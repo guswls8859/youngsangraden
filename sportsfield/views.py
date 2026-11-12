@@ -252,13 +252,7 @@ class ReservationDetailView(SportsfieldAccessMixin, View):
             'time': f'{fmt_time(r.time_start)}~{fmt_time(r.time_end)}',
             'name': r.applicant_name,
             'phone': r.phone,
-            'birth_date': r.birth_date,
-            'email': r.email,
-            'organization': r.organization,
             'total_users': r.total_users,
-            'scoreboard': r.scoreboard,
-            'adult_count': r.adult_count,
-            'child_count': r.child_count,
             'applied_at': r.applied_at.strftime('%Y-%m-%d %H:%M') if r.applied_at else '',
             'rv_status': r.rv_status,
             'category': r.get_category_display(),
@@ -354,18 +348,9 @@ class ReservationUpdateView(SportsfieldAccessMixin, View):
         r = get_object_or_404(Reservation, rv_no=rv_no)
         r.applicant_name = request.POST.get('applicant_name', r.applicant_name).strip() or r.applicant_name
         r.phone          = request.POST.get('phone', '').strip()
-        r.birth_date     = request.POST.get('birth_date', '').strip()
-        r.email          = request.POST.get('email', '').strip()
-        r.organization   = request.POST.get('organization', '').strip()
         r.total_users    = _parse_actual_count(request.POST.get('total_users'))
-        r.adult_count    = _parse_actual_count(request.POST.get('adult_count'))
-        r.child_count    = _parse_actual_count(request.POST.get('child_count'))
-        r.scoreboard     = request.POST.get('scoreboard', '').strip()
         r.rv_status      = request.POST.get('rv_status', '').strip()
-        r.save(update_fields=[
-            'applicant_name', 'phone', 'birth_date', 'email', 'organization',
-            'total_users', 'adult_count', 'child_count', 'scoreboard', 'rv_status',
-        ])
+        r.save(update_fields=['applicant_name', 'phone', 'total_users', 'rv_status'])
         return JsonResponse({'ok': True})
 
 

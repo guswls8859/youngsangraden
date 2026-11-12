@@ -6,6 +6,17 @@
 
 ---
 
+## [1.4.2] - 2026-11-12
+
+### 변경 — 예약 상세/수정에서 API 미제공 항목 제거
+- 예약시스템 API가 더 이상 주지 않는 항목(생년월일·이메일·소속·성인·어린이·전광판)을
+  예약 상세 보기·수정 폼에서 제거 — [templates/sportsfield/main.html](templates/sportsfield/main.html), [templates/sportsfield/cancel.html](templates/sportsfield/cancel.html)
+- 상세 JSON(`ReservationDetailView`) 및 수정 저장(`ReservationUpdateView`)에서도 해당 필드 제외 — [sportsfield/views.py](sportsfield/views.py)
+- 남는 항목: 구장·날짜·시간·예약자·연락처·예약인원·예약상태·예약번호·신청일시 (모두 API 제공값)
+- 모델 컬럼은 유지 (예전 크롤링 과거 예약 데이터 보존, 화면에서만 숨김)
+
+---
+
 ## [1.4.1] - 2026-11-12
 
 ### 변경 — 예약 API 수집 속도 개선 ([sportsfield/reservation_api.py](sportsfield/reservation_api.py))
