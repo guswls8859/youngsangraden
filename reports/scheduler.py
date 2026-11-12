@@ -2,7 +2,7 @@
 
 자동 수집 시각:
   - GODATA 입장객:  평일 17:50 / 토요일 20:50 / 일요일 17:50 KST
-  - 스포츠필드 예약: 10분 간격 (API)
+  - 스포츠필드 예약: 매일 09:00~18:30 창에서 3분 간격 (API)
 
 여러 gunicorn 워커가 각자 스케줄러를 띄우므로, 예약 수집은 PostgreSQL
 어드바이저리 락으로 동시에 한 워커만 실행되게 한다.
@@ -53,9 +53,9 @@ def start():
     # 스포츠필드 예약 API — 10분 간격
     scheduler.add_job(
         _run_reservation_sync,
-        trigger=IntervalTrigger(minutes=10, timezone='Asia/Seoul'),
+        trigger=IntervalTrigger(minutes=3, timezone='Asia/Seoul'),
         id='reservation_sync',
-        name='스포츠필드 예약 API 자동수집 (10분)',
+        name='스포츠필드 예약 API 자동수집 (09:00~18:30, 3분)',
         replace_existing=True,
         max_instances=1,          # 이전 실행이 안 끝났으면 건너뜀
         coalesce=True,            # 밀린 실행은 1회로 합침
@@ -63,18 +63,30 @@ def start():
     )
 
     scheduler.start()
-    logger.info('자동수집 스케줄러 시작 — GODATA(평일17:50/토20:50/일17:50) + 예약API(10분)')
+    logger.info('자동수집 스케줄러 시작 — GODATA(평일17:50/토20:50/일17:50) + 예약API(매일 09:00~18:30, 3분)')
     return scheduler
 
 
 # 예약 수집용 PostgreSQL 어드바이저리 락 키 (임의 고정값)
 _RESERVATION_LOCK_KEY = 920114
 
+# 자동 수집 시간대 창 (KST). 매일 09:00~18:30, 매 아침 09시부터 재개.
+import datetime as _dt
+_SYNC_WINDOW_START = _dt.time(9, 0)
+_SYNC_WINDOW_END = _dt.time(18, 30)
+
 
 def _run_reservation_sync():
     """스포츠필드 예약 API 동기화. 여러 워커 중복 실행을 어드바이저리 락으로 1개만 허용."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
     from django.db import connection
     from sportsfield.reservation_api import ReservationAPIError, sync_reservations
+
+    # 수집 창: 매일(주말 포함) 09:00 ~ 18:30 KST. 그 외 시간엔 API 호출하지 않음.
+    now = dt.datetime.now(ZoneInfo('Asia/Seoul')).time()
+    if not (_SYNC_WINDOW_START <= now <= _SYNC_WINDOW_END):
+        return
 
     try:
         with connection.cursor() as cur:
