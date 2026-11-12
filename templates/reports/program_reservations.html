@@ -40,6 +40,15 @@
     <span class="d-flex align-items-center gap-1 ms-1"><span class="badge bg-danger">노쇼</span> 노쇼</span>
 </div>
 
+<!-- 상태 필터 -->
+<div class="d-flex flex-wrap gap-1 mb-2 align-items-center">
+    <span class="small text-muted me-1">상태:</span>
+    <button type="button" class="btn btn-sm btn-primary status-btn" data-group="all">전체 ({{ group_counts.all }})</button>
+    <button type="button" class="btn btn-sm btn-outline-success status-btn" data-group="confirmed">확정 ({{ group_counts.confirmed }})</button>
+    <button type="button" class="btn btn-sm btn-outline-warning status-btn" data-group="pending">대기 ({{ group_counts.pending }})</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary status-btn" data-group="cancelled">취소 ({{ group_counts.cancelled }})</button>
+</div>
+
 <!-- 프로그램 탭 -->
 <ul class="nav nav-tabs mb-0" id="progTabs">
     {% for tab in tabs %}
@@ -74,6 +83,7 @@
                 {% if items %}
                 {% for item in items %}
                 <div class="pr-item mb-1 {{ item.cls }}{% if item.noshow %} is-noshow{% endif %}"
+                     data-group="{{ item.group }}"
                      title="{{ item.program }} · {{ item.time }} · {{ item.name }} · {{ item.status }}{% if item.people %} · {{ item.people }}명{% endif %}">
                     <span class="pr-time">{{ item.time }}</span>
                     <span class="pr-name">{{ item.name }}</span>
@@ -93,6 +103,30 @@
 {% endfor %}
 </div>
 {% endif %}
+
+<script>
+(function () {
+    let curGroup = 'all';
+    function apply() {
+        document.querySelectorAll('.pr-item').forEach(el => {
+            const show = curGroup === 'all' || el.dataset.group === curGroup;
+            el.classList.toggle('d-none', !show);
+        });
+    }
+    document.querySelectorAll('.status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            curGroup = btn.dataset.group;
+            document.querySelectorAll('.status-btn').forEach(b => {
+                const base = b.dataset.group === 'confirmed' ? 'success'
+                           : b.dataset.group === 'pending' ? 'warning'
+                           : b.dataset.group === 'cancelled' ? 'secondary' : 'primary';
+                b.className = 'btn btn-sm status-btn ' + (b === btn ? 'btn-' + base : 'btn-outline-' + base);
+            });
+            apply();
+        });
+    });
+})();
+</script>
 
 <style>
 .legend-box { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }

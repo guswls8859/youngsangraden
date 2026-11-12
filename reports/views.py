@@ -1022,6 +1022,12 @@ class ProgramReservationView(OperationsAccessMixin, TemplateView):
         '승인대기': 'st-pending',
         '예약취소': 'st-cancelled', '미선정': 'st-cancelled',
     }
+    # 필터용 그룹 (확정/대기/취소/기타)
+    _STATUS_GROUP = {
+        '예약확정': 'confirmed', '예약완료': 'confirmed',
+        '승인대기': 'pending',
+        '예약취소': 'cancelled', '미선정': 'cancelled',
+    }
 
     def _month_range(self):
         today = timezone.localdate()
@@ -1082,6 +1088,7 @@ class ProgramReservationView(OperationsAccessMixin, TemplateView):
                 'status': status,
                 'noshow': (r.get('noshow_status') or '').strip().upper() == 'O',
                 'cls': self._STATUS_CLS.get(status, 'st-etc'),
+                'group': self._STATUS_GROUP.get(status, 'etc'),
             }
             all_days[day].append(item)
             prog_days[prog][day].append(item)
@@ -1096,8 +1103,16 @@ class ProgramReservationView(OperationsAccessMixin, TemplateView):
         for i, (prog, cnt) in enumerate(sorted(prog_counter.items(), key=lambda x: -x[1])):
             tabs.append({'id': f'p{i}', 'label': prog, 'count': cnt,
                          'day_map': _sort(prog_days[prog])})
+        from collections import Counter as _C
+        gcount = _C(self._STATUS_GROUP.get((r.get('reserv_status') or '').strip() or '미지정', 'etc') for r in rows)
         ctx['tabs'] = tabs
         ctx['total'] = len(rows)
+        ctx['group_counts'] = {
+            'all': len(rows),
+            'confirmed': gcount.get('confirmed', 0),
+            'pending': gcount.get('pending', 0),
+            'cancelled': gcount.get('cancelled', 0),
+        }
         return ctx
 
 
