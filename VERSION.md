@@ -6,6 +6,16 @@
 
 ---
 
+## [1.4.3] - 2026-11-12
+
+### 추가 — 스포츠필드 예약 10분 간격 자동수집 ([reports/scheduler.py](reports/scheduler.py))
+- APScheduler에 `IntervalTrigger(minutes=10)` 작업 추가 → 예약 API를 10분마다 자동 동기화 (기존 수동 "새로고침" 버튼은 유지)
+- 여러 gunicorn 워커가 각자 스케줄러를 띄우므로, PostgreSQL 어드바이저리 락(`pg_try_advisory_lock`)으로 **동시에 한 워커만** 수집
+- `max_instances=1` / `coalesce=True` 로 이전 수집이 안 끝났으면 건너뜀·밀린 실행은 1회로 합침
+- API 실패·예외는 로그만 남기고 다음 주기에 재시도
+
+---
+
 ## [1.4.2] - 2026-11-12
 
 ### 변경 — 예약 상세/수정에서 API 미제공 항목 제거
