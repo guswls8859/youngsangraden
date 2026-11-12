@@ -1369,29 +1369,59 @@ _SF_CAT_LABEL = {'normal': '일반', 'quarter': '쿼터', 'event': '행사', 'ot
 
 
 def _sf_items(sf_reservations, sf_entries):
-    """(field_type, time_start, category, is_noshow) 목록.
+    """(field_type, time_start, time_end, category, is_noshow) 목록.
 
     같은 (구장, 시작시간)에 수기 entry가 있으면 그 슬롯의 크롤링 예약은 무시한다 (entry 우선).
     예약의 분류는 API gubun(일반/쿼터/행사/기타) 값 (예전 크롤링 데이터는 '일반').
     """
     entry_keys = {(e.field_type, e.time_start) for e in sf_entries}
-    items = [(e.field_type, e.time_start, e.category, e.is_noshow) for e in sf_entries]
+    items = [(e.field_type, e.time_start, e.time_end, e.category, e.is_noshow)
+             for e in sf_entries]
     items += [
-        (r.field_type, r.time_start, getattr(r, 'category', 'normal') or 'normal', r.is_noshow)
+        (r.field_type, r.time_start, r.time_end,
+         getattr(r, 'category', 'normal') or 'normal', r.is_noshow)
         for r in sf_reservations
         if (r.field_type, r.time_start) not in entry_keys
     ]
     return items
 
 
+def _sf_time(hhmm):
+    return datetime.time.fromisoformat(hhmm)
+
+
+def _overlaps(it_start, it_end, slot_start, slot_end):
+    """예약 시간[it_start, it_end)이 타임[slot_start, slot_end)에 걸치면 True.
+
+    종일(09:00~18:00)·반일 예약이 걸치는 타임마다 잡히도록 '정확히 시작 일치'가 아닌
+    시간 겹침으로 판정한다. 종료시간을 모르면(entry 등) 시작 일치일 때만.
+    """
+    if it_end is None:
+        return it_start == slot_start
+    return it_start < slot_end and it_end > slot_start
+
+
+def _sf_weight(field_type, category):
+    """쿼터·행사는 해당 종류 코트 전체를 사용 → 코트 수만큼 곱한다 (테니스).
+
+    1개 코트로 등록돼 있어도 잔디면 잔디 전 코트, 하드면 하드 전 코트를 쓴 것으로 집계.
+    일반/기타는 등록된 그대로 1.
+    """
+    from sportsfield.slots import COURT_COUNTS
+    if category in ('quarter', 'event'):
+        return COURT_COUNTS.get(field_type, 1)
+    return 1
+
+
 def _sf_format_counts(items):
-    """items의 분류별 예약/사용 건수를 표 셀 값으로 만든다. 없으면 모두 None."""
+    """items의 분류별 예약/사용 건수(코트 수 가중)를 표 셀 값으로 만든다. 없으면 모두 None."""
     if not items:
         return {'cat': None, 'reserved': None, 'actual': None}
     counts = {}
-    for _, _, cat, noshow in items:
+    for field, _s, _e, cat, noshow in items:
+        w = _sf_weight(field, cat)
         res, act = counts.get(cat, (0, 0))
-        counts[cat] = (res + 1, act + (0 if noshow else 1))
+        counts[cat] = (res + w, act + (0 if noshow else w))
     cats = sorted(counts, key=lambda c: _SF_CAT_ORDER.index(c) if c in _SF_CAT_ORDER else 99)
     return {
         'cat':      '/'.join(_SF_CAT_LABEL.get(c, c) for c in cats),
@@ -1400,26 +1430,51 @@ def _sf_format_counts(items):
     }
 
 
-def _sf_slot(items, field_types, start_time):
-    """구장(들)·시작시간에 해당하는 건수. tennis는 잔디+하드 합산."""
+def _sf_slot(items, field_types, slot_start, slot_end):
+    """구장(들)·타임에 걸치는 예약 건수. tennis는 잔디+하드 합산."""
     if isinstance(field_types, str):
         field_types = [field_types]
     return _sf_format_counts([
-        it for it in items if it[0] in field_types and it[1] == start_time
+        it for it in items
+        if it[0] in field_types and _overlaps(it[1], it[2], slot_start, slot_end)
     ])
 
 
-def _sf_day_total(items, cat_filter):
-    """하루 전체(모든 구장) 분류별 합계.
+# 구장별 타임 격자 (합계를 '타임당 건수의 합'으로 계산할 때 사용)
+def _sf_field_grids():
+    from sportsfield.slots import SLOT_GROUPS
+    return {
+        'soccer':       SLOT_GROUPS['soccer'],
+        'tennis_grass': SLOT_GROUPS['tennis'],
+        'tennis_hard':  SLOT_GROUPS['tennis'],
+        'baseball':     SLOT_GROUPS['baseball'],
+    }
 
-    cat_filter: 'normal' → 쿼터·행사 외 전부(일반+기타) / 'quarter' / 'event'
+
+def _sf_day_total(items, cat_filter):
+    """하루 전체 합계 = 각 예약이 걸친 '타임 수 × 코트 수'의 합.
+
+    예) 야구장 종일(09~18) 예약 1건 → 3개 타임 → 합계 3.
+        테니스 잔디 행사 1건(종일) → 4개 타임 × 잔디 2면 → 합계 8.
+    cat_filter: 'normal'(쿼터·행사 외) / 'quarter' / 'event'
     """
-    if cat_filter == 'normal':
-        sel = [it for it in items if it[2] not in ('quarter', 'event')]
-    else:
-        sel = [it for it in items if it[2] == cat_filter]
-    reserved = len(sel)
-    actual = sum(1 for it in sel if not it[3])
+    def _match(cat):
+        if cat_filter == 'normal':
+            return cat not in ('quarter', 'event')
+        return cat == cat_filter
+
+    grids = _sf_field_grids()
+    reserved = actual = 0
+    for field, s, e, cat, noshow in items:
+        if not _match(cat):
+            continue
+        n_slots = sum(1 for gs, ge in grids.get(field, [])
+                      if _overlaps(s, e, _sf_time(gs), _sf_time(ge)))
+        if not n_slots:
+            continue
+        w = _sf_weight(field, cat) * n_slots
+        reserved += w
+        actual += 0 if noshow else w
     return {'reserved': reserved or None, 'actual': actual if reserved else None}
 
 
@@ -1431,16 +1486,14 @@ def _organize_sf_slots(sf_reservations, sf_entries):
     """스포츠필드 예약/이용 데이터를 구장·타임별 구조로 정리한다."""
     from sportsfield.slots import SLOT_GROUPS, slot_label
 
-    def _t(hhmm):
-        return datetime.time.fromisoformat(hhmm)
-
     items = _sf_items(sf_reservations, sf_entries)
 
     st_rows = [
         {
             'label':  slot_label(i, s, e),
-            'soccer': _sf_slot(items, 'soccer', _t(s)),
-            'tennis': _sf_slot(items, ['tennis_grass', 'tennis_hard'], _t(s)),
+            'soccer': _sf_slot(items, 'soccer', _sf_time(s), _sf_time(e)),
+            'tennis': _sf_slot(items, ['tennis_grass', 'tennis_hard'],
+                               _sf_time(s), _sf_time(e)),
         }
         for i, (s, e) in enumerate(SLOT_GROUPS['soccer'])
     ]
@@ -1452,7 +1505,7 @@ def _organize_sf_slots(sf_reservations, sf_entries):
             total = {'cat': label, **_sf_day_total(items, cat_filter)}
         bb_rows.append({
             'label':    slot_label(i, s, e),
-            'baseball': _sf_slot(items, 'baseball', _t(s)),
+            'baseball': _sf_slot(items, 'baseball', _sf_time(s), _sf_time(e)),
             'total':    total,
         })
     return {'st_rows': st_rows, 'bb_rows': bb_rows}

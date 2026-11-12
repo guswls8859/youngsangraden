@@ -34,3 +34,11 @@ TIME_SLOTS = {
     'tennis_grass': _with_labels(_ST_SLOTS),
     'tennis_hard':  _with_labels(_ST_SLOTS),
 }
+
+
+# 테니스 코트 면수 — 쿼터/행사는 해당 종류 코트 전체를 쓰므로 집계 시 이 수만큼 곱한다.
+# 하드코트는 원래 4면이나 현재 2면 공사중 → 복구 시 tennis_hard 값만 4로.
+COURT_COUNTS = {
+    'tennis_grass': 2,
+    'tennis_hard':  2,
+}

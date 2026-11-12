@@ -1,4 +1,5 @@
 import calendar
+import logging
 import json
 from datetime import date
 
@@ -10,6 +11,8 @@ from django.views.generic import TemplateView
 
 from .models import FIELD_CHOICES, Reservation, SportsfieldEntry
 from .slots import TIME_SLOTS
+
+logger = logging.getLogger(__name__)
 
 
 class SportsfieldAccessMixin(LoginRequiredMixin):
@@ -224,8 +227,10 @@ class ScrapeRefreshView(SportsfieldAccessMixin, View):
         try:
             result = sync_reservations()
         except ReservationAPIError as e:
+            logger.warning('[예약API] 새로고침 실패: %s', e)
             return JsonResponse({'ok': False, 'message': str(e)}, status=502)
         except Exception as e:
+            logger.exception('[예약API] 새로고침 중 예외')
             return JsonResponse({'ok': False, 'message': str(e)}, status=500)
         last = Reservation.objects.order_by('-scraped_at').values_list('scraped_at', flat=True).first()
         scraped_str = last.strftime('%Y-%m-%d %H:%M') if last else ''

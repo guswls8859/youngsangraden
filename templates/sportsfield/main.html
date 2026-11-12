@@ -546,7 +546,11 @@ document.getElementById('refreshBtn').addEventListener('click', function () {
                 document.getElementById('lastScrapedText').textContent = '갱신: ' + data.scraped_at;
             }
             const r = data.result || {};
-            const unmapped = Object.entries(r.unmapped || {});
+            // 스포츠필드로 보이는데 구장 매핑이 안 된 이름만 알림 (다른 프로그램은 무시)
+            const unmapped = Object.entries(r.unmapped || {}).filter(([k]) => /테니스|야구|축구|구장/.test(k));
+            if ((r.warnings || []).length) {
+                alert('일부 구간의 예약 건수가 API 전체 건수와 다릅니다 (누락 가능):\n' + r.warnings.join('\n'));
+            }
             if (unmapped.length || (r.errors || []).length) {
                 // 구장 매핑이 안 된 프로그램명이 있으면 알려줌 (스포츠필드 외 프로그램일 수도 있음)
                 alert(`조회 ${r.fetched}건 / 신규 ${r.created}건 / 업데이트 ${r.updated}건\n\n`

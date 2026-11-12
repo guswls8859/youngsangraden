@@ -34,7 +34,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"완료 ({r['start']}~{r['end']}): 조회 {r['fetched']}건, 신규 {r['created']}건, "
             f"업데이트 {r['updated']}건, API 미조회 취소처리 {r['stale_cancelled']}건 "
-            f"(소요 {time.time() - t0:.1f}초)"))
+            f"(API {r['requests']}회 호출, 수집 {r['fetch_sec']}초 / 전체 {time.time() - t0:.1f}초)"))
+        for w in r['warnings']:
+            self.stdout.write(self.style.WARNING(f'  건수 불일치 {w}'))
         if r['unmapped']:
             self.stdout.write(self.style.WARNING(f"구장 매핑 안 된 프로그램명: {r['unmapped']}"))
         for err in r['errors']:
