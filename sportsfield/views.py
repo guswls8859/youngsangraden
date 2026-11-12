@@ -3,7 +3,6 @@ import json
 from datetime import date
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.management import call_command
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.views import View
@@ -45,7 +44,7 @@ def _build_calendar(year, month, reservations, entries):
     for r in reservations:
         d = r.reservation_date.day
         day_map.setdefault(d, []).append({
-            'category': 'normal',
+            'category': r.category or 'normal',
             'time_start': r.time_start,
             'time_end': r.time_end,
             'title': r.applicant_name,
@@ -221,13 +220,16 @@ class SportsfieldCancelView(SportsfieldAccessMixin, TemplateView):
 
 class ScrapeRefreshView(SportsfieldAccessMixin, View):
     def post(self, request, *args, **kwargs):
+        from .reservation_api import ReservationAPIError, sync_reservations
         try:
-            call_command('scrape_reservations')
-            last = Reservation.objects.order_by('-scraped_at').values_list('scraped_at', flat=True).first()
-            scraped_str = last.strftime('%Y-%m-%d %H:%M') if last else ''
-            return JsonResponse({'ok': True, 'scraped_at': scraped_str})
+            result = sync_reservations()
+        except ReservationAPIError as e:
+            return JsonResponse({'ok': False, 'message': str(e)}, status=502)
         except Exception as e:
             return JsonResponse({'ok': False, 'message': str(e)}, status=500)
+        last = Reservation.objects.order_by('-scraped_at').values_list('scraped_at', flat=True).first()
+        scraped_str = last.strftime('%Y-%m-%d %H:%M') if last else ''
+        return JsonResponse({'ok': True, 'scraped_at': scraped_str, 'result': result})
 
 
 class ReservationDetailView(SportsfieldAccessMixin, View):
@@ -254,6 +256,9 @@ class ReservationDetailView(SportsfieldAccessMixin, View):
             'child_count': r.child_count,
             'applied_at': r.applied_at.strftime('%Y-%m-%d %H:%M') if r.applied_at else '',
             'rv_status': r.rv_status,
+            'category': r.get_category_display(),
+            'program_name': r.program_name,
+            'pay_status': r.pay_status,
             'reservation_number': r.reservation_number,
             'actual_adult_count': r.actual_adult_count,
             'actual_child_count': r.actual_child_count,

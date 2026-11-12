@@ -6,6 +6,27 @@
 
 ---
 
+## [1.4.0] - 2026-11-12
+
+### 변경 — 스포츠필드 예약 수집: 관리자 페이지 크롤링 → 예약정보 조회 API
+- **API 클라이언트** [sportsfield/reservation_api.py](sportsfield/reservation_api.py)
+  - `GET https://yongsanparkstory.kr/_api/reservation_list.php` (location=children, kind=sports), 7일 단위 + 페이지 반복
+  - 인증: `X-API-KEY` 헤더 — 환경변수 **`RESERVATION_API_KEY`** (Cloudtype 환경변수에 설정 필요)
+  - ⚠ **허용 IP 34.64.184.142** (Cloudtype 서버)에서만 호출 가능. 로컬은 403 → 안내 메시지 출력
+- **매핑**
+  - `no` → `rv_no`, `program_name` 키워드 → 구장 (야구/축구/테니스+잔디·하드), 매핑 안 되면 건너뛰고 결과에 표시
+  - `reserv_status`: 예약확정→confirmed, 승인대기→pending(신규), 미선정·예약취소→cancelled
+  - `gubun` → 신규 `category` 필드 (일반/쿼터/행사/기타) — 통합 일일보고 분류에 반영
+  - `noshow_status`='O' → 노쇼 (현장에서 체크한 노쇼는 API가 빈 값이어도 유지)
+  - `reserv_time`에 종료시간이 없으면 슬롯 정의에서 계산
+  - 기간 내 DB에 있으나 API에 없는 예약 → cancelled / `API 미조회` (응답에 등장한 구장만)
+- **모델** `Reservation`: `category`, `program_name`, `pay_status` 추가, status에 `pending` 추가 (migration 0009)
+- **새로고침 버튼**: API 동기화 호출, 매핑 안 된 프로그램명/파싱 실패가 있으면 알림
+- 명령: `python manage.py scrape_reservations [--start YYYY-MM-DD --end YYYY-MM-DD]` (이름 유지)
+- `reports/api_file/`(API 키 포함 참고자료)는 `.gitignore` 처리
+
+---
+
 ## [1.3.1] - 2026-11-11
 
 ### 변경

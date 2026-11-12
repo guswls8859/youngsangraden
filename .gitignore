@@ -34,3 +34,6 @@ media/
 *.egg-info/
 dist/
 build/
+
+# 외부 API 키가 포함된 참고 자료
+reports/api_file/

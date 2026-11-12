@@ -545,6 +545,14 @@ document.getElementById('refreshBtn').addEventListener('click', function () {
             if (data.scraped_at) {
                 document.getElementById('lastScrapedText').textContent = '갱신: ' + data.scraped_at;
             }
+            const r = data.result || {};
+            const unmapped = Object.entries(r.unmapped || {});
+            if (unmapped.length || (r.errors || []).length) {
+                // 구장 매핑이 안 된 프로그램명이 있으면 알려줌 (스포츠필드 외 프로그램일 수도 있음)
+                alert(`조회 ${r.fetched}건 / 신규 ${r.created}건 / 업데이트 ${r.updated}건\n\n`
+                    + (unmapped.length ? '구장 매핑 안 된 프로그램명:\n' + unmapped.map(([k, n]) => `- ${k} (${n}건)`).join('\n') : '')
+                    + ((r.errors || []).length ? '\n\n파싱 실패:\n' + r.errors.join('\n') : ''));
+            }
             location.reload();
         } else {
             alert('오류: ' + data.message);

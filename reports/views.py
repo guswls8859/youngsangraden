@@ -1372,12 +1372,12 @@ def _sf_items(sf_reservations, sf_entries):
     """(field_type, time_start, category, is_noshow) 목록.
 
     같은 (구장, 시작시간)에 수기 entry가 있으면 그 슬롯의 크롤링 예약은 무시한다 (entry 우선).
-    크롤링 예약의 분류는 '일반'.
+    예약의 분류는 API gubun(일반/쿼터/행사/기타) 값 (예전 크롤링 데이터는 '일반').
     """
     entry_keys = {(e.field_type, e.time_start) for e in sf_entries}
     items = [(e.field_type, e.time_start, e.category, e.is_noshow) for e in sf_entries]
     items += [
-        (r.field_type, r.time_start, 'normal', r.is_noshow)
+        (r.field_type, r.time_start, getattr(r, 'category', 'normal') or 'normal', r.is_noshow)
         for r in sf_reservations
         if (r.field_type, r.time_start) not in entry_keys
     ]

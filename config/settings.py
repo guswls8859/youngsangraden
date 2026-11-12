@@ -11,6 +11,9 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-this')
 # 기상청 단기예보 API 키
 KMA_API_KEY = os.getenv('KMA_API_KEY', '')
 
+# 용산공원 예약정보 조회 API 키 (허용 IP 34.64.184.142 서버에서만 호출 가능)
+RESERVATION_API_KEY = os.getenv('RESERVATION_API_KEY', '')
+
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + [

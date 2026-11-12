@@ -12,7 +12,14 @@ FIELD_CHOICES = [
 class Reservation(models.Model):
     STATUS_CHOICES = [
         ('confirmed', '예약완료'),
+        ('pending', '승인대기'),
         ('cancelled', '예약취소'),
+    ]
+    CATEGORY_CHOICES = [
+        ('normal', '일반'),
+        ('quarter', '쿼터'),
+        ('event', '행사'),
+        ('other', '기타'),
     ]
 
     # 기본 크롤링 필드
@@ -24,6 +31,11 @@ class Reservation(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     rv_no = models.IntegerField(unique=True)
     scraped_at = models.DateTimeField(auto_now=True)
+
+    # 예약 API 연동 필드 (2026-11~)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='normal')
+    program_name = models.CharField(max_length=100, blank=True)
+    pay_status = models.CharField(max_length=20, blank=True)
 
     # 상세 페이지 추가 필드
     reservation_number = models.CharField(max_length=60, blank=True)
