@@ -45,9 +45,6 @@
         <a href="{% url 'reports:integrated_daily' %}" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-file-earmark-text"></i> 용산어린이정원 일일보고
         </a>
-        <a href="{% url 'reports:program_reservations' %}" class="btn btn-sm btn-outline-info">
-            <i class="bi bi-calendar-event"></i> 프로그램 예약
-        </a>
         {% if request.user.role == 'manager' %}
         <a href="{% url 'reports:task_report' %}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-clipboard-data"></i> 일일 업무보고

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load sportsfield_tags %}
 {% block title %}프로그램 예약 현황 - 용산어린이정원{% endblock %}
 
 {% block content %}
@@ -18,7 +19,7 @@
     </div>
 </div>
 
-<p class="text-muted small mb-3">
+<p class="text-muted small mb-2">
     예약관리 API(kind=program)에서 {{ start|date:'Y-m-d' }} ~ {{ end|date:'Y-m-d' }} 프로그램·행사 예약을 조회합니다.
     페이지를 열 때마다 실시간으로 가져옵니다.
 </p>
@@ -30,127 +31,86 @@
 </div>
 {% else %}
 
-<!-- 요약 -->
-<div class="row g-2 mb-3">
-    <div class="col-6 col-md-3">
-        <div class="card text-center shadow-sm border-0">
-            <div class="card-body py-2">
-                <div class="small text-muted">전체 예약</div>
-                <div class="fs-5 fw-bold">{{ summary.total }}건</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center shadow-sm border-0">
-            <div class="card-body py-2">
-                <div class="small text-muted">예약확정</div>
-                <div class="fs-5 fw-bold text-success">{{ summary.confirmed }}건</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center shadow-sm border-0">
-            <div class="card-body py-2">
-                <div class="small text-muted">노쇼</div>
-                <div class="fs-5 fw-bold text-danger">{{ summary.noshow }}건</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center shadow-sm border-0">
-            <div class="card-body py-2">
-                <div class="small text-muted">프로그램 종류</div>
-                <div class="fs-5 fw-bold">{{ summary.programs|length }}</div>
-            </div>
-        </div>
-    </div>
+<!-- 범례 -->
+<div class="d-flex flex-wrap gap-3 small mb-2">
+    <span class="d-flex align-items-center gap-1"><span class="legend-box st-confirmed"></span> 예약확정</span>
+    <span class="d-flex align-items-center gap-1"><span class="legend-box st-pending"></span> 승인대기</span>
+    <span class="d-flex align-items-center gap-1"><span class="legend-box st-cancelled"></span> 취소/미선정</span>
+    <span class="d-flex align-items-center gap-1"><span class="legend-box st-etc"></span> 기타</span>
+    <span class="d-flex align-items-center gap-1 ms-1"><span class="badge bg-danger">노쇼</span> 노쇼</span>
 </div>
 
-<!-- 상태 필터 -->
-<div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
-    <span class="small text-muted">상태 필터:</span>
-    <button type="button" class="btn btn-sm btn-primary filter-btn" data-status="all">전체</button>
-    {% for st, n in summary.by_status.items %}
-    <button type="button" class="btn btn-sm btn-outline-secondary filter-btn" data-status="{{ st }}">{{ st }} ({{ n }})</button>
+<!-- 프로그램 탭 -->
+<ul class="nav nav-tabs mb-0" id="progTabs">
+    {% for tab in tabs %}
+    <li class="nav-item">
+        <button class="nav-link {% if forloop.first %}active{% endif %}"
+                data-bs-toggle="tab" data-bs-target="#tab-{{ tab.id }}">
+            {{ tab.label }} <span class="badge bg-secondary">{{ tab.count }}</span>
+        </button>
+    </li>
     {% endfor %}
-    <input type="text" id="searchBox" class="form-control form-control-sm ms-auto" style="max-width:220px"
-           placeholder="프로그램·예약자 검색">
-</div>
+</ul>
 
-<div class="table-responsive">
-    <table class="table table-sm table-hover align-middle" id="progTable">
-        <thead class="table-light">
-            <tr class="text-center small">
-                <th>날짜</th><th>시간</th><th class="text-start">프로그램</th><th>예약자</th>
-                <th>인원</th><th>분류</th><th>금액</th><th>결제</th><th>예약상태</th><th>노쇼</th><th>예약번호</th>
+<div class="tab-content border border-top-0 rounded-bottom p-2 bg-white mb-4">
+{% for tab in tabs %}
+<div class="tab-pane fade {% if forloop.first %}show active{% endif %}" id="tab-{{ tab.id }}">
+    <table class="table table-bordered mb-0 pr-cal">
+        <thead class="table-light text-center">
+            <tr>
+                <th class="text-danger">일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th class="text-primary">토</th>
             </tr>
         </thead>
         <tbody>
-        {% for r in rows %}
-            <tr class="text-center small prog-row" data-status="{{ r.status }}"
-                data-search="{{ r.program|lower }} {{ r.name|lower }}">
-                <td>{{ r.date }}</td>
-                <td>{{ r.time }}</td>
-                <td class="text-start">{{ r.program }}</td>
-                <td>{{ r.name }}</td>
-                <td>{{ r.people|default:'-' }}</td>
-                <td>{{ r.gubun|default:'-' }}</td>
-                <td class="text-end">{{ r.amount|default:0 }}</td>
-                <td>{{ r.pay_status|default:'-' }}</td>
-                <td>
-                    {% if r.status == '예약확정' or r.status == '예약완료' %}
-                        <span class="badge bg-success">{{ r.status }}</span>
-                    {% elif r.status == '승인대기' %}
-                        <span class="badge bg-warning text-dark">{{ r.status }}</span>
-                    {% elif r.status == '예약취소' or r.status == '미선정' %}
-                        <span class="badge bg-secondary">{{ r.status }}</span>
-                    {% else %}
-                        <span class="badge bg-light text-dark border">{{ r.status }}</span>
-                    {% endif %}
-                </td>
-                <td>{% if r.noshow %}<span class="badge bg-danger">노쇼</span>{% else %}-{% endif %}</td>
-                <td class="text-muted" style="font-size:.75rem">{{ r.no }}</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="11" class="text-center text-muted py-4">해당 기간에 프로그램 예약이 없습니다.</td></tr>
+        {% for week in cal %}
+        <tr>
+            {% for day in week %}
+            {% if day == 0 %}
+            <td class="bg-light"></td>
+            {% else %}
+            <td class="pr-day {% if day == today.day and year == today.year and month == today.month %}today-cell{% endif %}">
+                <div class="day-num {% if forloop.counter == 1 %}text-danger{% elif forloop.counter == 7 %}text-primary{% endif %}">{{ day }}</div>
+                {% with items=tab.day_map|get_item:day %}
+                {% if items %}
+                {% for item in items %}
+                <div class="pr-item mb-1 {{ item.cls }}{% if item.noshow %} is-noshow{% endif %}"
+                     title="{{ item.program }} · {{ item.time }} · {{ item.name }} · {{ item.status }}{% if item.people %} · {{ item.people }}명{% endif %}">
+                    <span class="pr-time">{{ item.time }}</span>
+                    <span class="pr-name">{{ item.name }}</span>
+                    {% if item.noshow %}<span class="pr-noshow">노쇼</span>{% endif %}
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+            </td>
+            {% endif %}
+            {% endfor %}
+        </tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
-<p id="emptyFiltered" class="text-center text-muted py-3 d-none">조건에 맞는 예약이 없습니다.</p>
+{% endfor %}
+</div>
 {% endif %}
 
-<script>
-(function () {
-    const rows = Array.from(document.querySelectorAll('.prog-row'));
-    const emptyMsg = document.getElementById('emptyFiltered');
-    let curStatus = 'all';
-
-    function apply() {
-        const q = (document.getElementById('searchBox').value || '').trim().toLowerCase();
-        let shown = 0;
-        rows.forEach(tr => {
-            const okStatus = curStatus === 'all' || tr.dataset.status === curStatus;
-            const okSearch = !q || (tr.dataset.search || '').includes(q);
-            const show = okStatus && okSearch;
-            tr.classList.toggle('d-none', !show);
-            if (show) shown++;
-        });
-        if (emptyMsg) emptyMsg.classList.toggle('d-none', shown !== 0 || rows.length === 0);
-    }
-
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            curStatus = btn.dataset.status;
-            document.querySelectorAll('.filter-btn').forEach(b => {
-                b.classList.remove('btn-primary'); b.classList.add('btn-outline-secondary');
-            });
-            btn.classList.remove('btn-outline-secondary'); btn.classList.add('btn-primary');
-            apply();
-        });
-    });
-    const sb = document.getElementById('searchBox');
-    if (sb) sb.addEventListener('input', apply);
-})();
-</script>
+<style>
+.legend-box { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.pr-cal { table-layout: fixed; }
+.pr-cal td, .pr-cal th { width: calc(100%/7); }
+.pr-day { vertical-align: top; padding: 4px; height: 92px; }
+.today-cell { background-color: #fff9e6 !important; }
+.day-num { font-size: 0.8rem; font-weight: 700; margin-bottom: 2px; display: inline-block; }
+.pr-item { border-radius: 3px; font-size: 0.68rem; line-height: 1.25; padding: 1px 4px;
+           overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pr-item .pr-time { font-weight: 600; }
+.pr-item .pr-name { margin-left: 3px; }
+.pr-item .pr-noshow { margin-left: 3px; color: #b02a37; font-weight: 700; }
+.pr-item.is-noshow { opacity: .75; text-decoration: line-through; }
+/* 상태별 색 */
+.st-confirmed { background: #d1e7dd; border: 1px solid #a3cfbb; color: #0a3622; }
+.st-pending   { background: #fff3cd; border: 1px solid #ffe69c; color: #664d03; }
+.st-cancelled { background: #e2e3e5; border: 1px solid #c4c8cb; color: #41464b; }
+.st-etc       { background: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; }
+</style>
 {% endblock %}

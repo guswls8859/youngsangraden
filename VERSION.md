@@ -6,6 +6,16 @@
 
 ---
 
+## [1.5.1] - 2026-11-12
+
+### 변경 — 프로그램 예약 페이지 달력형 + 상단 탭 이동
+- 표 → **월 달력형**으로 변경 (스포츠필드 달력과 동일 UI), 날짜 셀에 시간·예약자·상태색·노쇼 표시 ([templates/reports/program_reservations.html](templates/reports/program_reservations.html))
+- 프로그램별 **상단 탭**(전체 + 프로그램별) + 상태 색 범례
+- 진입 위치를 운영사무국 버튼 바 → **상단 네비 탭**("프로그램 예약")으로 이동 ([templates/base.html](templates/base.html), [templates/reports/task_calendar.html](templates/reports/task_calendar.html))
+- 뷰: 프로그램별 day_map·달력 주 구성 반환 ([reports/views.py](reports/views.py) `ProgramReservationView`)
+
+---
+
 ## [1.5.0] - 2026-11-12
 
 ### 추가 — 운영사무국 "프로그램 예약" 조회 페이지
