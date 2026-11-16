@@ -1463,29 +1463,51 @@ def integrated_daily_excel(request):
     return response
 
 
-# ── 스포츠필드 건별 집계 (2026-11-10~, sample5 양식) ─────────────────────────
-#   예약 = 해당 타임의 예약 건수 (확정 예약 + 수기 entry)
-#   사용 = 그 중 노쇼가 아닌 건수
-#   분류가 여러 개면 '일반/쿼터', '2/1', '2/1' 형태로 표기
+# ── 스포츠필드 이용인원 집계 (2026-11-16~ 인원 기준) ────────────────────────
+#   예약 = 예약인원(명) 합계
+#   사용 = 일반/기타: 예약인원을 그대로 / 행사·쿼터: 실사용 인원수 / 노쇼: 0
+#   분류가 여러 개면 '일반/쿼터', '예약 12/40', '사용 12/35' 형태로 표기
 _SF_CAT_ORDER = ['normal', 'quarter', 'event', 'other']
 _SF_CAT_LABEL = {'normal': '일반', 'quarter': '쿼터', 'event': '행사', 'other': '기타'}
+_SF_ACTUAL_CATS = ('quarter', 'event')   # 실사용 인원수로 집계하는 분류
+
+
+def _sf_people(reserved, used_actual, category, is_noshow):
+    """한 예약의 (예약인원, 사용인원)을 반환.
+
+    - 노쇼: 사용 0
+    - 행사·쿼터: 사용 = 실사용 인원수(used_actual)
+    - 일반·기타: 사용 = 예약인원(reserved)
+    """
+    reserved = reserved or 0
+    if is_noshow:
+        used = 0
+    elif category in _SF_ACTUAL_CATS:
+        used = used_actual or 0
+    else:
+        used = reserved
+    return reserved, used
 
 
 def _sf_items(sf_reservations, sf_entries):
-    """(field_type, time_start, time_end, category, is_noshow) 목록.
+    """(field_type, time_start, time_end, category, reserved_people, used_people) 목록.
 
     같은 (구장, 시작시간)에 수기 entry가 있으면 그 슬롯의 크롤링 예약은 무시한다 (entry 우선).
-    예약의 분류는 API gubun(일반/쿼터/행사/기타) 값 (예전 크롤링 데이터는 '일반').
+    분류는 API gubun(일반/쿼터/행사/기타). 사용인원은 _sf_people 규칙을 따른다.
     """
     entry_keys = {(e.field_type, e.time_start) for e in sf_entries}
-    items = [(e.field_type, e.time_start, e.time_end, e.category, e.is_noshow)
-             for e in sf_entries]
-    items += [
-        (r.field_type, r.time_start, r.time_end,
-         getattr(r, 'category', 'normal') or 'normal', r.is_noshow)
-        for r in sf_reservations
-        if (r.field_type, r.time_start) not in entry_keys
-    ]
+    items = []
+    for e in sf_entries:
+        reserved = (e.reserved_adult_count or 0) + (e.reserved_child_count or 0)
+        actual   = (e.actual_adult_count or 0) + (e.actual_child_count or 0)
+        res_p, use_p = _sf_people(reserved, actual, e.category, e.is_noshow)
+        items.append((e.field_type, e.time_start, e.time_end, e.category, res_p, use_p))
+    for r in sf_reservations:
+        if (r.field_type, r.time_start) in entry_keys:
+            continue
+        cat = getattr(r, 'category', 'normal') or 'normal'
+        res_p, use_p = _sf_people(r.total_users, getattr(r, 'use_count', None), cat, r.is_noshow)
+        items.append((r.field_type, r.time_start, r.time_end, cat, res_p, use_p))
     return items
 
 
@@ -1504,27 +1526,14 @@ def _overlaps(it_start, it_end, slot_start, slot_end):
     return it_start < slot_end and it_end > slot_start
 
 
-def _sf_weight(field_type, category):
-    """쿼터·행사는 해당 종류 코트 전체를 사용 → 코트 수만큼 곱한다 (테니스).
-
-    1개 코트로 등록돼 있어도 잔디면 잔디 전 코트, 하드면 하드 전 코트를 쓴 것으로 집계.
-    일반/기타는 등록된 그대로 1.
-    """
-    from sportsfield.slots import COURT_COUNTS
-    if category in ('quarter', 'event'):
-        return COURT_COUNTS.get(field_type, 1)
-    return 1
-
-
 def _sf_format_counts(items):
-    """items의 분류별 예약/사용 건수(코트 수 가중)를 표 셀 값으로 만든다. 없으면 모두 None."""
+    """items의 분류별 예약/사용 인원을 표 셀 값으로 만든다. 없으면 모두 None."""
     if not items:
         return {'cat': None, 'reserved': None, 'actual': None}
     counts = {}
-    for field, _s, _e, cat, noshow in items:
-        w = _sf_weight(field, cat)
-        res, act = counts.get(cat, (0, 0))
-        counts[cat] = (res + w, act + (0 if noshow else w))
+    for _field, _s, _e, cat, res_p, use_p in items:
+        r, a = counts.get(cat, (0, 0))
+        counts[cat] = (r + res_p, a + use_p)
     cats = sorted(counts, key=lambda c: _SF_CAT_ORDER.index(c) if c in _SF_CAT_ORDER else 99)
     return {
         'cat':      '/'.join(_SF_CAT_LABEL.get(c, c) for c in cats),
@@ -1534,7 +1543,7 @@ def _sf_format_counts(items):
 
 
 def _sf_slot(items, field_types, slot_start, slot_end):
-    """구장(들)·타임에 걸치는 예약 건수. tennis는 잔디+하드 합산."""
+    """구장(들)·타임에 걸치는 예약의 인원. tennis는 잔디+하드 합산."""
     if isinstance(field_types, str):
         field_types = [field_types]
     return _sf_format_counts([
@@ -1543,22 +1552,9 @@ def _sf_slot(items, field_types, slot_start, slot_end):
     ])
 
 
-# 구장별 타임 격자 (합계를 '타임당 건수의 합'으로 계산할 때 사용)
-def _sf_field_grids():
-    from sportsfield.slots import SLOT_GROUPS
-    return {
-        'soccer':       SLOT_GROUPS['soccer'],
-        'tennis_grass': SLOT_GROUPS['tennis'],
-        'tennis_hard':  SLOT_GROUPS['tennis'],
-        'baseball':     SLOT_GROUPS['baseball'],
-    }
-
-
 def _sf_day_total(items, cat_filter):
-    """하루 전체 합계 = 각 예약이 걸친 '타임 수 × 코트 수'의 합.
+    """하루 전체 분류별 이용인원 합계. 각 예약을 1회만 센다(종일 예약도 1회).
 
-    예) 야구장 종일(09~18) 예약 1건 → 3개 타임 → 합계 3.
-        테니스 잔디 행사 1건(종일) → 4개 타임 × 잔디 2면 → 합계 8.
     cat_filter: 'normal'(쿼터·행사 외) / 'quarter' / 'event'
     """
     def _match(cat):
@@ -1566,18 +1562,12 @@ def _sf_day_total(items, cat_filter):
             return cat not in ('quarter', 'event')
         return cat == cat_filter
 
-    grids = _sf_field_grids()
     reserved = actual = 0
-    for field, s, e, cat, noshow in items:
+    for _field, _s, _e, cat, res_p, use_p in items:
         if not _match(cat):
             continue
-        n_slots = sum(1 for gs, ge in grids.get(field, [])
-                      if _overlaps(s, e, _sf_time(gs), _sf_time(ge)))
-        if not n_slots:
-            continue
-        w = _sf_weight(field, cat) * n_slots
-        reserved += w
-        actual += 0 if noshow else w
+        reserved += res_p
+        actual += use_p
     return {'reserved': reserved or None, 'actual': actual if reserved else None}
 
 

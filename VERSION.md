@@ -6,6 +6,20 @@
 
 ---
 
+## [1.6.0] - 2026-11-16
+
+### 변경 — 스포츠필드 이용 통계: 건수 → 인원(명) 기준 (운영 요청)
+- 예약 = 예약인원(명) 합계, 사용 = 아래 규칙으로 집계 ([reports/views.py](reports/views.py))
+  - **일반·기타**: 예약인원을 그대로 사용인원에 집계
+  - **행사·쿼터**: 실사용 인원수(API `total_use` / 수기 실사용)로 집계
+  - **노쇼**: 사용 0
+- 합계(일반/쿼터/행사)는 각 예약을 1회만 합산 (종일 예약도 1회) — 코트 수 가중·타임당 건수 합 제거
+- API 사용인원 저장: `Reservation.use_count`(= `total_use`) 추가 (migration 0010) ([sportsfield/models.py](sportsfield/models.py), [sportsfield/reservation_api.py](sportsfield/reservation_api.py))
+- HWPX·PDF 출력은 `_organize_sf_slots` 결과를 그대로 사용 → 양쪽 동일 반영
+- 검증(2026-11-01): 야구 일반 예약12→사용12, 쿼터 노쇼 80→0, 테니스 행사 잔디150+하드150=예약300/사용0
+
+---
+
 ## [1.5.3] - 2026-11-16
 
 ### 수정 — GODATA 수집 간헐 실패 (게이트/시간대 데이터 누락)

@@ -127,6 +127,7 @@ def row_to_defaults(row):
         'program_name':       row.get('program_name') or '',
         'pay_status':         row.get('pay_status') or '',
         'total_users':        row.get('total_people'),
+        'use_count':          row.get('total_use'),
         'reservation_number': row.get('reserve_code') or str(row.get('no') or ''),
         'applied_at':         applied_at,
         # noshow_status: 'O' 이면 노쇼

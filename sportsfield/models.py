@@ -36,6 +36,7 @@ class Reservation(models.Model):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='normal')
     program_name = models.CharField(max_length=100, blank=True)
     pay_status = models.CharField(max_length=20, blank=True)
+    use_count = models.PositiveIntegerField(null=True, blank=True, verbose_name='API 사용인원')
 
     # 상세 페이지 추가 필드
     reservation_number = models.CharField(max_length=60, blank=True)
