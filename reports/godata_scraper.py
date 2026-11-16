@@ -67,7 +67,10 @@ def fetch_today_entry_count() -> dict | None:
 
             # ── 시간대별 탭 ───────────────────────────────────
             nav_ok = True
-            if not (_try_click(page, '#ext-element-707') or
+            # 시간대별 탭: ExtJS treelist 항목(.x-treelist-item-text). id가 매번 바뀌므로
+            # 보이는 텍스트를 기다렸다가 클릭하는 방식을 우선 사용.
+            if not (_click_visible_text(page, '시간대별') or
+                    _try_click(page, '#ext-element-707') or
                     _try_force_click(page, 'text=시간대별')):
                 logger.warning('GODATA: 시간대별 탭 진입 실패 — 게이트/시간대 데이터 수집 스킵')
                 nav_ok = False
@@ -83,10 +86,12 @@ def fetch_today_entry_count() -> dict | None:
 
             if nav_ok:
                 page.wait_for_timeout(1000)
-                # ── 조회 버튼 (동적 ID → 텍스트 기반) ───────────
-                if not (_try_click(page, '#O7A8_id-btnEl') or
-                        _try_force_click(page, 'text=조회') or
-                        _try_force_click(page, 'button:has-text("조회")')):
+                # ── 조회 버튼 ───────────────────────────────────
+                # ExtJS 버튼은 보이는 x-btn-inner('조회')의 -btnWrap 래퍼를 클릭해야 한다.
+                # (기존: #O7A8_id-btnEl 하드코딩 → id 변동/내부 span 비액션으로 실패,
+                #  text=조회 는 11개 매칭으로 strict 위반)
+                if not (_click_extjs_button(page, '조회') or
+                        _try_click(page, '#O7A8_id-btnWrap')):
                     logger.warning('GODATA: 조회 버튼 클릭 실패 — 데이터 수집 스킵')
                     nav_ok = False
 
@@ -343,4 +348,44 @@ def _try_force_click(page, selector) -> bool:
         page.click(selector, timeout=3000, force=True)
         return True
     except Exception:
+        return False
+
+
+def _click_visible_text(page, label, timeout=8000) -> bool:
+    """보이는 '정확히 label' 텍스트 요소가 나타날 때까지 기다렸다가 클릭한다.
+
+    ExtJS treelist 탭/라벨처럼 id가 매번 바뀌는 요소를 타이밍 안정적으로 클릭하기 위함.
+    일반 클릭이 안 되면 force 클릭으로 재시도.
+    """
+    try:
+        loc = page.get_by_text(label, exact=True).locator('visible=true')
+        loc.first.wait_for(state='visible', timeout=timeout)
+        try:
+            loc.first.click(timeout=4000)
+        except Exception:
+            loc.first.click(timeout=4000, force=True)
+        return True
+    except Exception as e:
+        logger.warning('텍스트 클릭("%s") 실패: %s', label, e)
+        return False
+
+
+def _click_extjs_button(page, label) -> bool:
+    """ExtJS 버튼을 '보이는 x-btn-inner 정확 텍스트'로 찾아 클릭한다.
+
+    ExtJS는 버튼 id(O7A8_id 등)를 렌더 순서마다 다르게 생성하므로 하드코딩 id는
+    깨지기 쉽다. 또 클릭 대상은 내부 span(-btnEl)이 아니라 래퍼(-btnWrap)여야 한다.
+    같은 라벨의 숨은 버튼이 있을 수 있어 visible 필터로 거른다.
+    """
+    try:
+        inner = page.locator(f'span.x-btn-inner:text-is("{label}")').locator('visible=true')
+        if inner.count() == 0:
+            return False
+        prefix = inner.first.evaluate('e => e.id').replace('-btnInnerEl', '')
+        if not prefix:
+            return False
+        page.click(f'#{prefix}-btnWrap', timeout=5000)
+        return True
+    except Exception as e:
+        logger.warning('ExtJS 버튼("%s") 클릭 실패: %s', label, e)
         return False

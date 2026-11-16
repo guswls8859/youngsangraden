@@ -6,6 +6,19 @@
 
 ---
 
+## [1.5.3] - 2026-11-16
+
+### 수정 — GODATA 수집 간헐 실패 (게이트/시간대 데이터 누락)
+- 증상: 입장/퇴장 총수는 수집되나 "조회 버튼 클릭 실패"/"시간대별 탭 진입 실패"로 게이트별·시간대 데이터가 None (nav_ok=False)
+- 원인: ExtJS 자동생성 id(`#O7A8_id-btnEl`, `#ext-element-707`)가 렌더마다 바뀌고, 조회 버튼은 내부 span(-btnEl)이 아니라 래퍼(-btnWrap)를 클릭해야 함. `text=조회`는 11개 매칭으로 strict 위반
+- 수정 ([reports/godata_scraper.py](reports/godata_scraper.py)):
+  - `_click_extjs_button()`: 보이는 `x-btn-inner` 정확 텍스트로 찾아 `-btnWrap` 래퍼 클릭 (조회 버튼)
+  - `_click_visible_text()`: 보이는 정확 텍스트 요소를 대기 후 클릭 (시간대별 treelist 탭)
+  - 하드코딩 id는 폴백으로만 유지
+- 검증: 로컬 4회 연속 성공 (게이트 130/1/6, 시간대 48슬롯)
+
+---
+
 ## [1.5.2] - 2026-11-12
 
 ### 추가 — 프로그램 예약 상태 필터 (확정/대기/취소)
