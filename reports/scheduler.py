@@ -107,7 +107,18 @@ def _run_reservation_sync():
 
 
 def _run_sync():
-    """스케줄러가 호출하는 실제 동기화 함수."""
+    """스케줄러가 호출하는 실제 동기화 함수.
+
+    용산어린이정원이 휴관일이면 GODATA 자동수집을 건너뛴다.
+    휴관 여부 조회가 실패(None)하면 수집을 진행한다(데이터 누락 방지, fail-open).
+    """
     from reports.godata_scraper import sync_godata_to_db
-    logger.info('GODATA 자동수집 실행')
+    from reports.park_status import is_closed_today
+
+    closed = is_closed_today()
+    if closed:
+        logger.info('GODATA 자동수집 스킵 — 오늘은 휴관일')
+        return
+    logger.info('GODATA 자동수집 실행 (휴관 여부: %s)',
+                '개관' if closed is False else '확인불가→진행')
     sync_godata_to_db()

@@ -6,6 +6,17 @@
 
 ---
 
+## [1.6.1] - 2026-11-16
+
+### 추가 — 휴관일엔 GODATA 자동수집 스킵
+- 공식 안내 페이지(`type1_visit_info`)의 '오늘 휴관/개관' 표시를 파싱해 휴관 여부 판별 ([reports/park_status.py](reports/park_status.py))
+  - 로그인·IP 제한 없이 일반 HTTP, 1시간 메모리 캐시
+- GODATA 자동수집(`_run_sync`)이 **휴관일이면 스킵**, 개관일이면 수집 ([reports/scheduler.py](reports/scheduler.py))
+  - 휴관 여부 조회 실패(None)면 수집 진행(fail-open, 데이터 누락 방지)
+- 수동 수집(버튼/명령)은 그대로 동작
+
+---
+
 ## [1.6.0] - 2026-11-16
 
 ### 변경 — 스포츠필드 이용 통계: 건수 → 인원(명) 기준 (운영 요청)
