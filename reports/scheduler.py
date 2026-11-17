@@ -2,7 +2,7 @@
 
 자동 수집 시각:
   - GODATA 입장객:  평일 17:50 / 토요일 20:50 / 일요일 17:50 KST
-  - 스포츠필드 예약: 매일 09:00~18:30 창에서 3분 간격 (API)
+  - 스포츠필드 예약: 매일 09:00~18:30 창에서 30분 간격 (API)
 
 여러 gunicorn 워커가 각자 스케줄러를 띄우므로, 예약 수집은 PostgreSQL
 어드바이저리 락으로 동시에 한 워커만 실행되게 한다.
@@ -53,9 +53,9 @@ def start():
     # 스포츠필드 예약 API — 10분 간격
     scheduler.add_job(
         _run_reservation_sync,
-        trigger=IntervalTrigger(minutes=3, timezone='Asia/Seoul'),
+        trigger=IntervalTrigger(minutes=30, timezone='Asia/Seoul'),
         id='reservation_sync',
-        name='스포츠필드 예약 API 자동수집 (09:00~18:30, 3분)',
+        name='스포츠필드 예약 API 자동수집 (09:00~18:30, 30분)',
         replace_existing=True,
         max_instances=1,          # 이전 실행이 안 끝났으면 건너뜀
         coalesce=True,            # 밀린 실행은 1회로 합침
@@ -63,7 +63,7 @@ def start():
     )
 
     scheduler.start()
-    logger.info('자동수집 스케줄러 시작 — GODATA(평일17:50/토20:50/일17:50) + 예약API(매일 09:00~18:30, 3분)')
+    logger.info('자동수집 스케줄러 시작 — GODATA(평일17:50/토20:50/일17:50) + 예약API(매일 09:00~18:30, 30분)')
     return scheduler
 
 

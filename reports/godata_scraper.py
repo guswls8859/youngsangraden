@@ -68,10 +68,13 @@ def fetch_today_entry_count() -> dict | None:
             # ── 시간대별 탭 ───────────────────────────────────
             nav_ok = True
             # 시간대별 탭: ExtJS treelist 항목(.x-treelist-item-text). id가 매번 바뀌므로
-            # 보이는 텍스트를 기다렸다가 클릭하는 방식을 우선 사용.
-            if not (_click_visible_text(page, '시간대별') or
+            # 보이는 텍스트를 기다렸다가 클릭한다. 대시보드 로딩이 늦으면 간헐 실패하므로
+            # 최대 3회 재시도(각 사이 2초 대기).
+            if not _retry(lambda: (
+                    _click_visible_text(page, '시간대별') or
                     _try_click(page, '#ext-element-707') or
-                    _try_force_click(page, 'text=시간대별')):
+                    _try_force_click(page, 'text=시간대별')
+                ), attempts=3, wait_ms=2000, page=page):
                 logger.warning('GODATA: 시간대별 탭 진입 실패 — 게이트/시간대 데이터 수집 스킵')
                 nav_ok = False
 
@@ -349,6 +352,19 @@ def _try_force_click(page, selector) -> bool:
         return True
     except Exception:
         return False
+
+
+def _retry(fn, attempts=3, wait_ms=2000, page=None) -> bool:
+    """fn()이 True를 반환할 때까지 최대 attempts회 재시도. 각 실패 후 wait_ms 대기."""
+    for i in range(attempts):
+        try:
+            if fn():
+                return True
+        except Exception as e:
+            logger.warning('재시도 %d/%d 중 예외: %s', i + 1, attempts, e)
+        if page is not None and i < attempts - 1:
+            page.wait_for_timeout(wait_ms)
+    return False
 
 
 def _click_visible_text(page, label, timeout=8000) -> bool:

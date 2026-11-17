@@ -6,6 +6,15 @@
 
 ---
 
+## [1.6.2] - 2026-11-17
+
+### 변경 — 스포츠필드 자동수집 주기 30분 + GODATA 시간대별 재시도
+- 스포츠필드 예약 API 자동수집 주기 **3분 → 30분** (GODATA 수집과 자원 경합 의심 완화) ([reports/scheduler.py](reports/scheduler.py))
+- GODATA "시간대별" 탭 진입이 간헐 실패(대시보드 로딩 지연)해서 **최대 3회 재시도** 추가 ([reports/godata_scraper.py](reports/godata_scraper.py) `_retry`)
+- 창/스킵 로직(09:00~18:30, 휴관일 스킵)은 그대로
+
+---
+
 ## [1.6.1] - 2026-11-16
 
 ### 추가 — 휴관일엔 GODATA 자동수집 스킵
