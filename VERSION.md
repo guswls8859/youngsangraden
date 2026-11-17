@@ -6,6 +6,18 @@
 
 ---
 
+## [1.6.3] - 2026-11-17
+
+### 개선 — GODATA 수집 안정화 (반복 실패 대응)
+- 원인: GODATA는 깨끗한 JSON API가 아니라 상태기반 RPC(`HandleEvent`, `_seq_`/세션 의존)라 브라우저 밖 직접호출이 불가. 실패는 대시보드 로딩 타이밍에 따른 간헐 현상
+- 개선 ([reports/godata_scraper.py](reports/godata_scraper.py)):
+  - `fetch_today_entry_count_robust()`: 게이트/시간대(nav_ok) 성공까지 **최대 3회 전체 재수집**(매 시도 새 브라우저). 자동수집(`sync_godata_to_db`)이 이를 사용
+  - 대시보드 진입 후 `networkidle`+마스크(`_wait_mask`) 안정화 대기 추가
+  - 전부 실패해도 입장 총수라도 저장(기존 유지)
+- 로컬 연속 테스트 4/4 첫 시도 성공(게이트 정상)
+
+---
+
 ## [1.6.2] - 2026-11-17
 
 ### 변경 — 스포츠필드 자동수집 주기 30분 + GODATA 시간대별 재시도

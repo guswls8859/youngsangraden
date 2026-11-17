@@ -61,6 +61,12 @@ def fetch_today_entry_count() -> dict | None:
                 if not _try_force_click(page, 'text=대시보드1'):
                     _force_click(page, 'text=대시보드')
             page.wait_for_timeout(3000)
+            # 대시보드 로딩 완료 대기(간헐 실패 원인) — 네트워크/마스크 안정화 후 진행
+            try:
+                page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception:
+                pass
+            _wait_mask(page)
 
             # ── 입장 총수는 시간대별 진입 전에 먼저 읽는다 ───
             body_main = page.inner_text('body')
@@ -158,6 +164,28 @@ def fetch_today_entry_count() -> dict | None:
         return None
 
 
+def fetch_today_entry_count_robust(attempts=3):
+    """게이트/시간대 데이터(nav_ok)까지 성공할 때까지 최대 attempts회 재수집한다.
+
+    GODATA 대시보드는 로딩 타이밍에 따라 간헐적으로 '시간대별/조회' 단계가 실패한다.
+    매 시도마다 새 브라우저로 처음부터 접속하므로 상태 오염이 없다.
+    - nav_ok=True 결과가 나오면 즉시 반환
+    - 전부 nav_ok 실패여도, 입장 총수라도 잡힌 마지막 결과를 반환(총수 저장 보장)
+    """
+    best = None
+    for i in range(attempts):
+        r = fetch_today_entry_count()
+        if r and r.get('nav_ok'):
+            if i:
+                logger.info('GODATA 재수집 성공 (%d회차)', i + 1)
+            return r
+        if r:
+            best = r
+        logger.warning('GODATA 수집 %d/%d회차 — nav 미완료%s',
+                       i + 1, attempts, ' (재시도)' if i < attempts - 1 else '')
+    return best
+
+
 def sync_godata_to_db(target_date=None, data=None) -> bool:
     """
     GODATA 데이터를 OperationsDailyData에 저장한다.
@@ -174,7 +202,7 @@ def sync_godata_to_db(target_date=None, data=None) -> bool:
     logger.info('GODATA 동기화 시작: %s', target_date)
 
     if data is None:
-        data = fetch_today_entry_count()
+        data = fetch_today_entry_count_robust()
     if data is None:
         logger.error('GODATA 동기화 실패: 데이터 수집 불가')
         return False
