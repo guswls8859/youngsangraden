@@ -32,7 +32,7 @@ class RegisterForm(UserCreationForm):
 class AdminUserCreateForm(UserCreationForm):
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'email', 'department', 'phone', 'role', 'organization', 'is_active']
+        fields = ['username', 'first_name', 'last_name', 'email', 'department', 'phone', 'role', 'organization', 'is_active', 'can_download_weekly']
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -42,6 +42,7 @@ class AdminUserCreateForm(UserCreationForm):
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'role': forms.Select(attrs={'class': 'form-select'}),
             'organization': forms.Select(attrs={'class': 'form-select'}),
+            'can_download_weekly': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -62,7 +63,7 @@ class AdminUserEditForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'email', 'department', 'phone', 'role', 'organization', 'is_active']
+        fields = ['username', 'first_name', 'last_name', 'email', 'department', 'phone', 'role', 'organization', 'is_active', 'can_download_weekly']
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -72,6 +73,7 @@ class AdminUserEditForm(forms.ModelForm):
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'role': forms.Select(attrs={'class': 'form-select'}),
             'organization': forms.Select(attrs={'class': 'form-select'}),
+            'can_download_weekly': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
     def save(self, commit=True):

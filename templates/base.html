@@ -39,7 +39,7 @@
                         <i class="bi bi-calendar-event"></i> 프로그램 예약
                     </a>
                 </li>
-                {% if user.can_download_weekly %}
+                {% if user.can_access_weekly_report %}
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'reports:weekly_report' %}">
                         <i class="bi bi-calendar-week"></i> 주간 결과보고

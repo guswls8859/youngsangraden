@@ -60,6 +60,15 @@
                         </label>
                     </div>
                 </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        {{ form.can_download_weekly }}
+                        <label class="form-check-label fw-semibold" for="{{ form.can_download_weekly.id_for_label }}">
+                            <i class="bi bi-calendar-week"></i> 주간 결과보고 권한
+                        </label>
+                        <div class="form-text">체크한 사람에게만 상단에 '주간 결과보고' 탭이 보입니다. 소속이 <strong>운영사무국</strong>이어야 적용됩니다.</div>
+                    </div>
+                </div>
 
                 <div class="col-12"><hr class="my-1"></div>
 

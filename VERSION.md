@@ -6,6 +6,20 @@
 
 ---
 
+## [1.7.1] - 2026-11-22
+
+### 개선 — 주간 결과보고 권한을 관리자 패널에서 설정
+- 원인: `can_download_weekly` 권한이 Django 기본 관리(`/admin/`)에만 노출돼, 관리자 › 사용자 관리 화면에서는 켤 수 없었음
+- 사용자 추가/수정 폼에 "주간 결과보고 권한" 체크박스 추가 ([accounts/forms.py](accounts/forms.py), [templates/accounts/admin/user_form.html](templates/accounts/admin/user_form.html))
+- 사용자 목록에 "주간보고" 열 추가 — 권한 보유 / 체크됐지만 운영사무국 소속 아님 구분 ([templates/accounts/admin/user_list.html](templates/accounts/admin/user_list.html))
+- 상단 "주간 결과보고" 탭 노출 조건을 실제 접근 조건과 일치시킴
+
+```django
+{% if user.can_access_weekly_report %}  {# 운영사무국 + 권한 체크 #}
+```
+
+---
+
 ## [1.6.3] - 2026-11-17
 
 ### 개선 — GODATA 수집 안정화 (반복 실패 대응)
