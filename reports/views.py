@@ -1,4 +1,5 @@
 import datetime
+from pathlib import Path
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.decorators import login_required
@@ -1783,6 +1784,194 @@ def integrated_daily_hwp(request):
     response = HttpResponse(hwpx_bytes, content_type='application/hwp+zip')
     response['Content-Disposition'] = (
         f"attachment; filename=\"daily_report_{target_date_set}.hwpx\"; "
+        f"filename*=UTF-8''{encoded}"
+    )
+    return response
+
+
+# ══ 주간 결과보고 ══════════════════════════════════════════════════════════
+# 운영현황 표의 구장 열: (키, 포함 field_type들). 테니스는 잔디+하드 합산.
+_SF_WEEKLY_FIELDS = [
+    ('soccer',   ['soccer']),
+    ('baseball', ['baseball']),
+    ('tennis',   ['tennis_grass', 'tennis_hard']),
+]
+
+
+def _sf_weekly_day(items):
+    """하루치 _sf_items → 구장별 {일반예약, 장소사용} 집계.
+
+    - 일반예약  = category가 쿼터·행사가 아닌 예약 (일반/기타). 인원=예약인원.
+    - 장소사용  = 쿼터·행사 예약.                          인원=실사용인원.
+    각 그룹은 건수(count)와 인원(people)을 함께 낸다.
+    """
+    out = {}
+    for key, ftypes in _SF_WEEKLY_FIELDS:
+        n_cnt = n_ppl = p_cnt = p_ppl = 0
+        for field, _s, _e, cat, res_p, use_p in items:
+            if field not in ftypes:
+                continue
+            if cat in ('quarter', 'event'):
+                p_cnt += 1
+                p_ppl += use_p
+            else:
+                n_cnt += 1
+                n_ppl += res_p
+        out[key] = {
+            'normal': {'count': n_cnt, 'people': n_ppl},
+            'place':  {'count': p_cnt, 'people': p_ppl},
+        }
+    return out
+
+
+def _week_open_days(anchor):
+    """anchor가 속한 주(월~일)의 '개관일' 날짜 목록.
+
+    화~일은 항상 포함. 월요일은 통상 휴관이므로 OperationsDailyData가 있을 때만 포함
+    (= 그 월요일에 일일보고가 작성된 개관일).
+    """
+    monday = anchor - datetime.timedelta(days=anchor.weekday())  # weekday(): 월=0
+    mon_open = OperationsDailyData.objects.filter(report_date=monday).exists()
+    days = []
+    for i in range(7):
+        d = monday + datetime.timedelta(days=i)
+        if d.weekday() == 0 and not mon_open:
+            continue
+        days.append(d)
+    return days
+
+
+_WEEKDAY_KO = '월화수목금토일'
+
+
+def _gather_weekly_data(anchor):
+    """주간 결과보고용 데이터 — 개관일별로 일일보고 집계를 옆으로 나열.
+
+    스포츠필드 운영현황 외에도, 일일보고에 이미 있는 값(방문현황·주출입구 차량분류·
+    편익시설 매출·셔틀/렌탈/스탬프)을 함께 취합한다. (자판기·누계·결제·돌봄은 별도 소스)
+    """
+    days = _week_open_days(anchor)
+    cols = []
+    for d in days:
+        data = _gather_integrated_data(d)
+        ops  = data['ops_data']
+        items = _sf_items(data['sf_reservations'], data['sf_entries'])
+
+        # 결제현황: 코트종류별 결제금액 합계 (확정 예약 기준)
+        pay = {'soccer': 0, 'baseball': 0, 'tennis_grass': 0, 'tennis_hard': 0}
+        for rv in data['sf_reservations']:
+            if rv.field_type in pay:
+                pay[rv.field_type] += (getattr(rv, 'amount', None) or 0)
+
+        kum = data['kumnare_report']
+        info = data['info_report']
+        shuttle = (info.shuttle_total if info else 0) or _v(ops, 'manual_shuttle_total')
+        rental  = (kum.rental_total_users if kum else 0) or _v(ops, 'manual_rental_total')
+        stamp   = (kum.stamp_issued       if kum else 0) or _v(ops, 'manual_stamp_total')
+
+        cols.append({
+            'date':    d,
+            'weekday': _WEEKDAY_KO[d.weekday()],
+            'label':   f'{d:%m.%d}({_WEEKDAY_KO[d.weekday()]})',
+            'sf':      _sf_weekly_day(items),
+            # 방문현황 (표: 관람객 방문 결과보고)
+            'visit': {
+                'main_walk': _v(ops, 'main_gate_walk'),
+                'car':       _v(ops, 'car_visit'),
+                'sub_walk':  _v(ops, 'sub_gate_walk'),
+                'rear_walk': _v(ops, 'rear_gate_walk'),
+                'total':     _v(ops, 'today_total'),
+            },
+            # 주출입구 방문차량 (다둥이/장애/임산)
+            'parking': {
+                'family':   _v(ops, 'parking_family'),
+                'disabled': _v(ops, 'parking_disabled'),
+                'pregnant': _v(ops, 'parking_pregnant'),
+            },
+            # 편익시설 매출 (일자별)
+            'sales': {
+                'eoulrim': data['eoulrim_sales'],
+                'jamjam':  data['jamjam_sales'],
+                'kumnare': data['kumnare_sales'],
+            },
+            # 기타 운영 (셔틀/렌탈/스탬프)
+            'detail': {'shuttle': shuttle, 'rental': rental, 'stamp': stamp},
+            # 스포츠필드 결제현황 (코트종류별 금액)
+            'payment': pay,
+        })
+    return {'days': days, 'cols': cols}
+
+
+def _v(obj, attr, default=0):
+    """None-safe 속성 getter."""
+    if obj is None:
+        return default
+    val = getattr(obj, attr, default)
+    return val if val is not None else default
+
+
+class WeeklyReportAccessMixin(OperationsAccessMixin):
+    """운영사무국 소속 + 주간보고 다운로드 권한이 부여된 사용자만 접근."""
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not request.user.can_access_weekly_report:
+            return redirect('main_menu')
+        return super().dispatch(request, *args, **kwargs)
+
+
+class WeeklyReportView(WeeklyReportAccessMixin, TemplateView):
+    template_name = 'reports/weekly_report.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        week_str = self.request.GET.get('week')
+        try:
+            anchor = datetime.date.fromisoformat(week_str)
+        except (TypeError, ValueError):
+            anchor = timezone.localdate()
+        monday = anchor - datetime.timedelta(days=anchor.weekday())
+        data = _gather_weekly_data(anchor)
+        ctx.update({
+            'anchor':     anchor,
+            'monday':     monday,
+            'sunday':     monday + datetime.timedelta(days=6),
+            'prev_week':  monday - datetime.timedelta(days=7),
+            'next_week':  monday + datetime.timedelta(days=7),
+            'cols':       data['cols'],
+            'sf_fields':  [('soccer', '축구'), ('baseball', '야구'), ('tennis', '테니스')],
+            'template_ready': (Path(__file__).parent / 'data' / 'week_base.hwpx').exists(),
+        })
+        return ctx
+
+
+@login_required
+def weekly_report_hwp(request):
+    """주간 결과보고 한글파일 다운로드 — 권한 보유자만."""
+    if not request.user.can_access_weekly_report:
+        return redirect('main_menu')
+
+    week_str = request.GET.get('week')
+    try:
+        anchor = datetime.date.fromisoformat(week_str)
+    except (TypeError, ValueError):
+        anchor = timezone.localdate()
+
+    template_path = Path(__file__).parent / 'data' / 'week_base.hwpx'
+    if not template_path.exists():
+        messages.error(request, '주간보고 템플릿(week_base.hwpx)이 아직 등록되지 않았습니다.')
+        return redirect(f'/reports/weekly/?week={anchor}')
+
+    from .hwpx_report import build_weekly_hwpx
+    data = _gather_weekly_data(anchor)
+    hwpx_bytes = build_weekly_hwpx(cols=data['cols'])
+
+    from urllib.parse import quote
+    monday = anchor - datetime.timedelta(days=anchor.weekday())
+    tag = f'{monday:%y%m%d}'
+    filename = f'(중앙일보)용산어린이정원_주간결과보고_{tag}.hwpx'
+    encoded  = quote(filename, safe='')
+    response = HttpResponse(hwpx_bytes, content_type='application/hwp+zip')
+    response['Content-Disposition'] = (
+        f"attachment; filename=\"weekly_report_{tag}.hwpx\"; "
         f"filename*=UTF-8''{encoded}"
     )
     return response

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load sportsfield_tags %}
+{% block title %}주간 결과보고 - 용산어린이정원{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h4 class="mb-0"><i class="bi bi-calendar-week"></i> 주간 결과보고</h4>
+    <div class="d-flex align-items-center gap-2">
+        <a href="?week={{ prev_week|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        <span class="fw-semibold">{{ monday|date:'Y.m.d' }} ~ {{ sunday|date:'m.d' }}</span>
+        <a href="?week={{ next_week|date:'Y-m-d' }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+        {% if template_ready %}
+        <a href="{% url 'reports:weekly_report_hwp' %}?week={{ anchor|date:'Y-m-d' }}"
+           class="btn btn-sm btn-primary ms-1">
+            <i class="bi bi-download"></i> 한글 다운로드
+        </a>
+        {% else %}
+        <button class="btn btn-sm btn-secondary ms-1" disabled
+                title="week_base.hwpx 템플릿 등록 후 활성화됩니다">
+            <i class="bi bi-download"></i> 한글 다운로드
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{% if not template_ready %}
+<div class="alert alert-warning py-2 small mb-3">
+    <i class="bi bi-exclamation-triangle"></i>
+    한글 양식(<code>reports/data/week_base.hwpx</code>)이 아직 등록되지 않아 다운로드가 비활성화돼 있어요.
+    아래 미리보기로 집계 값을 먼저 확인할 수 있습니다.
+</div>
+{% endif %}
+
+<p class="text-muted small mb-2">
+    개관일({{ cols|length }}일)의 스포츠필드 운영현황입니다. 월요일은 휴관이 아닌 경우에만 열로 포함됩니다.
+    <br>· <b>일반예약</b> = 일반·기타 예약(인원=예약인원) · <b>장소사용</b> = 쿼터·행사(인원=실사용인원)
+</p>
+
+{% if not cols %}
+<div class="alert alert-secondary">이 주에는 개관일 데이터가 없습니다.</div>
+{% else %}
+<div class="table-responsive">
+<table class="table table-bordered table-sm text-center wk-table align-middle mb-4">
+    <thead class="table-light">
+        <tr>
+            <th rowspan="2" class="wk-head">구분</th>
+            {% for c in cols %}
+            <th colspan="3">{{ c.label }}</th>
+            {% endfor %}
+        </tr>
+        <tr>
+            {% for c in cols %}
+            <th>축구</th><th>야구</th><th>테니스</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <th class="wk-head">일반예약<br>(건)</th>
+            {% for c in cols %}
+                {% for key, _lbl in sf_fields %}
+                {% with g=c.sf|get_item:key %}
+                <td>{% if g.normal.count %}{{ g.normal.count }}{% else %}-{% endif %}</td>
+                {% endwith %}
+                {% endfor %}
+            {% endfor %}
+        </tr>
+        <tr>
+            <th class="wk-head">일반예약<br>(인원)</th>
+            {% for c in cols %}
+                {% for key, _lbl in sf_fields %}
+                {% with g=c.sf|get_item:key %}
+                <td>{% if g.normal.count %}{{ g.normal.people }}{% else %}-{% endif %}</td>
+                {% endwith %}
+                {% endfor %}
+            {% endfor %}
+        </tr>
+        <tr>
+            <th class="wk-head">장소사용<br>(건)</th>
+            {% for c in cols %}
+                {% for key, _lbl in sf_fields %}
+                {% with g=c.sf|get_item:key %}
+                <td>{% if g.place.count %}{{ g.place.count }}{% else %}-{% endif %}</td>
+                {% endwith %}
+                {% endfor %}
+            {% endfor %}
+        </tr>
+        <tr>
+            <th class="wk-head">장소사용<br>(인원)</th>
+            {% for c in cols %}
+                {% for key, _lbl in sf_fields %}
+                {% with g=c.sf|get_item:key %}
+                <td>{% if g.place.count %}{{ g.place.people }}{% else %}-{% endif %}</td>
+                {% endwith %}
+                {% endfor %}
+            {% endfor %}
+        </tr>
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+<style>
+.wk-table th, .wk-table td { font-size: 0.8rem; padding: 3px 5px; vertical-align: middle; }
+.wk-table thead th { background: #f1f3f5; }
+.wk-head { background: #e9ecef !important; white-space: nowrap; }
+</style>
+{% endblock %}

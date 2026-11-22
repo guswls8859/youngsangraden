@@ -1052,3 +1052,394 @@ def _inject_manifest_items(hpf_xml, items):
         )
     # </opf:manifest> 앞에 삽입
     return hpf_xml.replace('</opf:manifest>', insert_block + '</opf:manifest>')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 주간 결과보고 (week_base.hwpx)
+# ──────────────────────────────────────────────────────────────────────────────
+#  템플릿 표 구조 (화~일 6일 기준):
+#   - 날짜 헤더: 모든 '요일표'의 첫 행에 'MM.DD(요일)' 셀. 6개를 그 주 날짜로 교체.
+#   - 스포츠필드 운영현황 표(col0='일반예약(건)' 보유): 1일 = 3열(축구/야구/테니스),
+#     행 4개(일반예약 건/인원, 장소사용 건/인원)를 집계값으로 채운다.
+#   - 월요일이 개관(7일)이면 각 요일표 맨 앞에 하루치 열묶음을 삽입한다.
+#   - 그 외 표(방문/매출/자판기/셔틀/결제 등)의 숫자 셀은 비워 둔다(수기/추후 자동화 대상).
+#     돌봄프로그램 표(col0='학교명')는 주 단위라 손대지 않는다.
+import re as _re
+
+WEEK_HWPX = Path(__file__).parent / 'data' / 'week_base.hwpx'
+
+_DATE_RE = _re.compile(r'^\d{1,2}\.\d{1,2}\([^)]\)$')
+_NUM_RE  = _re.compile(r'^[\d,.\-\s]*$')
+_SF_FIELD_OFFSET = (('soccer', 0), ('baseball', 1), ('tennis', 2))  # 축구/야구/테니스 순
+_SF_ROW_LABELS = {
+    '일반예약(건)':   ('normal', 'count'),
+    '일반예약(인원)': ('normal', 'people'),
+    '장소사용(건)':   ('place',  'count'),
+    '장소사용(인원)': ('place',  'people'),
+}
+
+
+def _wk_text(tc):
+    """셀 전체 텍스트(공백 제거)."""
+    return ''.join(''.join(t.itertext()) for t in tc.iter(f'{{{HP}}}t')).strip()
+
+
+def _wk_set(tc, text):
+    """셀 첫 번째 hp:t를 text로, 나머지 hp:t는 ''로 비운다(여러 줄/런 잔존 방지)."""
+    ts = list(tc.iter(f'{{{HP}}}t'))
+    if not ts:
+        _set_t(tc, text)
+        return
+    for ch in list(ts[0]):
+        ts[0].remove(ch)
+    ts[0].text = text
+    for extra in ts[1:]:
+        for ch in list(extra):
+            extra.remove(ch)
+        extra.text = ''
+
+
+def _wk_rows(tbl):
+    return tbl.findall('hp:tr', NS)
+
+
+def _wk_cellmap(tbl):
+    """(rowAddr, colAddr) → tc. 셀 주소 기준."""
+    cmap = {}
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            a = tc.find('hp:cellAddr', NS)
+            if a is not None:
+                cmap[(int(a.get('rowAddr')), int(a.get('colAddr')))] = tc
+    return cmap
+
+
+def _wk_is_day_table(tbl):
+    """날짜 헤더(MM.DD(요일))를 가진 표인지."""
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            if _DATE_RE.match(_wk_text(tc)):
+                return True
+    return False
+
+
+def _wk_find_sf_table(tbls):
+    for tbl in tbls:
+        for tr in _wk_rows(tbl):
+            for tc in tr.findall('hp:tc', NS):
+                if _wk_text(tc) == '일반예약(건)':
+                    return tbl
+    return None
+
+
+def _wk_is_care_table(tbl):
+    """돌봄프로그램 표(주 단위) — 손대지 않음."""
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            if _wk_text(tc) == '학교명':
+                return True
+    return False
+
+
+def _wk_renumber_cols(tbl):
+    """각 행을 문서 순서대로 훑어 colAddr를 colSpan 누적으로 재부여하고 colCnt를 갱신한다."""
+    maxcol = 0
+    for tr in _wk_rows(tbl):
+        col = 0
+        for tc in tr.findall('hp:tc', NS):
+            addr = tc.find('hp:cellAddr', NS)
+            span = tc.find('hp:cellSpan', NS)
+            cs = int(span.get('colSpan')) if span is not None else 1
+            if addr is not None:
+                addr.set('colAddr', str(col))
+            col += cs
+        maxcol = max(maxcol, col)
+    tbl.set('colCnt', str(maxcol))
+    return maxcol
+
+
+def _wk_insert_leading_day(tbl, cols_per_day):
+    """요일표 맨 앞(col0 라벨 뒤, 첫 날짜열 앞)에 하루치 열묶음을 삽입한다.
+
+    기존 '첫 날짜'(colAddr 범위 [start, start+k))에 해당하는 셀들을 각 행에서 복제해
+    그 앞에 끼워 넣고, colAddr/colCnt/폭을 재계산한다. 텍스트는 이후 채움 단계에서 덮어쓴다.
+    """
+    from copy import deepcopy
+    # 첫 데이터 열 시작 colAddr 찾기: 날짜 헤더 셀(행0) 중 최소 colAddr
+    start = None
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            if _DATE_RE.match(_wk_text(tc)):
+                a = tc.find('hp:cellAddr', NS)
+                c = int(a.get('colAddr'))
+                start = c if start is None else min(start, c)
+    if start is None:
+        return 0
+    added_w = 0
+    for tr in _wk_rows(tbl):
+        tcs = tr.findall('hp:tc', NS)
+        # 이 행에서 첫 날짜 열묶음에 속한 셀들 (colAddr in [start, start+k))
+        group = []
+        for tc in tcs:
+            a = tc.find('hp:cellAddr', NS)
+            c = int(a.get('colAddr'))
+            span = tc.find('hp:cellSpan', NS)
+            cs = int(span.get('colSpan')) if span is not None else 1
+            if start <= c < start + cols_per_day:
+                group.append((tc, cs))
+        if not group:
+            # 삽입 지점을 가로지르는 병합 셀(예: '합계' 행 col0 spanN)은 폭만 넓힌다
+            for tc in tcs:
+                a = tc.find('hp:cellAddr', NS)
+                c = int(a.get('colAddr'))
+                span = tc.find('hp:cellSpan', NS)
+                cs = int(span.get('colSpan')) if span is not None else 1
+                if span is not None and c < start < c + cs:
+                    span.set('colSpan', str(cs + cols_per_day))
+                    break
+            continue
+        first_tc = group[0][0]
+        idx = list(tr).index(first_tc)
+        # 묶음을 통째로 복제해 앞에 삽입
+        for off, (tc, cs) in enumerate(group):
+            clone = deepcopy(tc)
+            tr.insert(idx + off, clone)
+            if tr is _wk_rows(tbl)[0]:
+                sz = clone.find('hp:cellSz', NS)
+                if sz is not None and sz.get('width'):
+                    added_w += int(sz.get('width'))
+    _wk_renumber_cols(tbl)
+    # 표 폭 증가
+    sz = tbl.find('hp:sz', NS)
+    if sz is not None and sz.get('width') and added_w:
+        sz.set('width', str(int(sz.get('width')) + added_w))
+    return added_w
+
+
+def _wk_replace_dates(tbl, labels):
+    """표의 날짜 헤더 셀을 좌→우 순서로 labels로 교체."""
+    cells = []
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            if _DATE_RE.match(_wk_text(tc)):
+                a = tc.find('hp:cellAddr', NS)
+                cells.append((int(a.get('rowAddr')), int(a.get('colAddr')), tc))
+    cells.sort(key=lambda x: (x[0], x[1]))
+    for (_r, _c, tc), lab in zip(cells, labels):
+        _wk_set(tc, lab)
+
+
+def _wk_fill_sf(tbl, cols):
+    """스포츠필드 운영현황 표 채우기. 1일 = 3열(축구/야구/테니스)."""
+    cmap = _wk_cellmap(tbl)
+    label_row = {}
+    for (r, c), tc in cmap.items():
+        if c == 0:
+            label_row[_wk_text(tc)] = r
+    # 첫 데이터 열 시작 colAddr
+    start = min((c for (r, c) in cmap if r == 1 and c >= 1), default=1)
+
+    def _cell_value(g, group, kind):
+        has = g[group]['count'] > 0
+        if not has:
+            return '-'
+        return str(g[group][kind])
+
+    for label, (group, kind) in _SF_ROW_LABELS.items():
+        r = label_row.get(label)
+        if r is None:
+            continue
+        for d, col in enumerate(cols):
+            base = start + 3 * d
+            for fkey, foff in _SF_FIELD_OFFSET:
+                tc = cmap.get((r, base + foff))
+                if tc is not None:
+                    _wk_set(tc, _cell_value(col['sf'][fkey], group, kind))
+
+
+def _wk_num0(n):
+    """정수를 콤마 포맷. 0/None/비정상은 '-'."""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return '-'
+    return f'{n:,}' if n else '-'
+
+
+def _wk_day_cols(tbl):
+    """날짜 헤더 셀들의 colAddr(좌→우 정렬). 각 요일 열묶음의 시작 colAddr."""
+    out = []
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            if _DATE_RE.match(_wk_text(tc)):
+                a = tc.find('hp:cellAddr', NS)
+                out.append(int(a.get('colAddr')))
+    return sorted(out)
+
+
+def _wk_row_by_label(tbl):
+    """(col0 라벨 → rowAddr) 사전과 (rowAddr,colAddr)→tc 맵."""
+    cmap = _wk_cellmap(tbl)
+    label_row = {}
+    for (r, c), tc in cmap.items():
+        if c == 0:
+            label_row[_wk_text(tc)] = r
+    return label_row, cmap
+
+
+def _wk_fill_1col(tbl, cols, rowmap, group):
+    """1일=1열 표 채우기. rowmap: {col0라벨: cols[d][group]의 key}."""
+    label_row, cmap = _wk_row_by_label(tbl)
+    day_cols = _wk_day_cols(tbl)
+    for lbl, key in rowmap.items():
+        r = label_row.get(lbl)
+        if r is None:
+            continue
+        for d, col in enumerate(cols):
+            if d >= len(day_cols):
+                break
+            tc = cmap.get((r, day_cols[d]))
+            if tc is not None:
+                _wk_set(tc, _wk_num0(col[group][key]))
+
+
+def _wk_fill_3col(tbl, cols, row_label, group, keys):
+    """1일=3열 표 채우기(다둥/장애/임산, 셔틀/렌탈/스탬프). row_label 행의 3열을 채운다."""
+    label_row, cmap = _wk_row_by_label(tbl)
+    day_cols = _wk_day_cols(tbl)
+    r = label_row.get(row_label)
+    if r is None:
+        return
+    for d, col in enumerate(cols):
+        if d >= len(day_cols):
+            break
+        base = day_cols[d]
+        for off, key in enumerate(keys):
+            tc = cmap.get((r, base + off))
+            if tc is not None:
+                _wk_set(tc, _wk_num0(col[group][key]))
+
+
+def _wk_fill_payment(tbl, cols):
+    """스포츠필드 결제현황 표: 코트종류별 일자 금액 + 소계(행) + 합계(표)."""
+    label_row, cmap = _wk_row_by_label(tbl)
+    day_cols = _wk_day_cols(tbl)
+    subtotal_col = (max(day_cols) + 1) if day_cols else None  # 날짜열 다음 = 소계 열
+    courts = [('축구장', 'soccer'), ('야구장', 'baseball'),
+              ('테니스장(잔디)', 'tennis_grass'), ('테니스장(하드)', 'tennis_hard')]
+    grand = 0
+    for lbl, key in courts:
+        r = label_row.get(lbl)
+        if r is None:
+            continue
+        rowsum = 0
+        for d, col in enumerate(cols):
+            if d >= len(day_cols):
+                break
+            v = col['payment'][key]
+            rowsum += v
+            tc = cmap.get((r, day_cols[d]))
+            if tc is not None:
+                _wk_set(tc, _wk_num0(v))
+        grand += rowsum
+        if subtotal_col is not None:
+            tc = cmap.get((r, subtotal_col))
+            if tc is not None:
+                _wk_set(tc, _wk_num0(rowsum))
+    r = label_row.get('합계')
+    if r is not None and subtotal_col is not None:
+        tc = cmap.get((r, subtotal_col))
+        if tc is not None:
+            _wk_set(tc, _wk_num0(grand))
+
+
+def _wk_classify(tbl):
+    """요일표 종류 판별."""
+    texts = {_wk_text(tc) for tr in _wk_rows(tbl) for tc in tr.findall('hp:tc', NS)}
+    if '일반예약(건)' in texts:   return 'sf'
+    if '총 방문수' in texts:       return 'visit'
+    if '다둥' in texts:            return 'parking'
+    if '어울림' in texts:          return 'cafe'
+    if '셔틀' in texts:            return 'detail'
+    if '테니스장(잔디)' in texts:  return 'payment'
+    return 'other'
+
+
+def _wk_blank_data(tbl):
+    """숫자/‘-’ 데이터 셀을 비운다(col0 라벨·날짜·한글 라벨은 유지)."""
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            a = tc.find('hp:cellAddr', NS)
+            if a is None or int(a.get('colAddr')) == 0:
+                continue
+            txt = _wk_text(tc)
+            if not txt or _DATE_RE.match(txt):
+                continue
+            if _NUM_RE.match(txt):
+                _wk_set(tc, '')
+
+
+def build_weekly_hwpx(cols):
+    """주간 결과보고 .hwpx 생성. cols: _gather_weekly_data()['cols'] (개관일 6~7개)."""
+    labels = [c['label'] for c in cols]
+    n = len(cols)
+
+    with zipfile.ZipFile(WEEK_HWPX, 'r') as zin:
+        sec0 = zin.read('Contents/section0.xml')
+    root = ET.fromstring(sec0)
+    tbls = [t for t in root.iter(f'{{{HP}}}tbl')]
+    sf_tbl = _wk_find_sf_table(tbls)
+
+    for tbl in tbls:
+        if not _wk_is_day_table(tbl) or _wk_is_care_table(tbl):
+            continue
+        # 월요일 개관(7일): 맨 앞에 하루치 열묶음 삽입
+        if n == 7:
+            _wk_insert_leading_day(tbl, _wk_cols_per_day(tbl))
+        _wk_replace_dates(tbl, labels)
+
+        kind = _wk_classify(tbl)
+        if kind == 'sf':
+            _wk_fill_sf(tbl, cols)
+        elif kind == 'visit':
+            _wk_fill_1col(tbl, cols, {
+                '주출입구 도보방문': 'main_walk', '주출입구 차량방문': 'car',
+                '부출입구 도보방문': 'sub_walk', '부출입구 주차장 도보방문': 'rear_walk',
+                '총 방문수': 'total',
+            }, 'visit')
+        elif kind == 'parking':
+            _wk_fill_3col(tbl, cols, '방문현황', 'parking', ('family', 'disabled', 'pregnant'))
+        elif kind == 'cafe':
+            _wk_fill_1col(tbl, cols, {
+                '어울림': 'eoulrim', '잼잼': 'jamjam', '꿈나래': 'kumnare',
+            }, 'sales')
+        elif kind == 'detail':
+            _wk_fill_3col(tbl, cols, '방문현황', 'detail', ('shuttle', 'rental', 'stamp'))
+        elif kind == 'payment':
+            _wk_fill_payment(tbl, cols)
+        else:
+            _wk_blank_data(tbl)
+
+    xml_decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+    sec0_new = (xml_decl + ET.tostring(root, encoding='unicode')).encode('utf-8')
+
+    out = io.BytesIO()
+    with zipfile.ZipFile(WEEK_HWPX, 'r') as zin:
+        with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename == 'Contents/section0.xml':
+                    zout.writestr(item, sec0_new)
+                else:
+                    zout.writestr(item, zin.read(item.filename))
+    out.seek(0)
+    return out.read()
+
+
+def _wk_cols_per_day(tbl):
+    """요일표의 1일당 열 수(1 또는 3). 날짜 헤더 셀의 colSpan으로 판정."""
+    for tr in _wk_rows(tbl):
+        for tc in tr.findall('hp:tc', NS):
+            if _DATE_RE.match(_wk_text(tc)):
+                span = tc.find('hp:cellSpan', NS)
+                return int(span.get('colSpan')) if span is not None else 1
+    return 1

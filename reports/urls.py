@@ -49,4 +49,7 @@ urlpatterns = [
     path('integrated/hwp/', views.integrated_daily_hwp, name='integrated_daily_hwp'),
     path('integrated/godata/fetch/', views.godata_manual_fetch, name='godata_manual_fetch'),
     path('integrated/excel/', views.integrated_daily_excel, name='integrated_daily_excel'),
+
+    path('weekly/', views.WeeklyReportView.as_view(), name='weekly_report'),
+    path('weekly/hwp/', views.weekly_report_hwp, name='weekly_report_hwp'),
 ]

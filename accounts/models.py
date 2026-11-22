@@ -26,6 +26,10 @@ class User(AbstractUser):
         max_length=20, choices=ORGANIZATION_CHOICES,
         default='operations', verbose_name='소속'
     )
+    can_download_weekly = models.BooleanField(
+        default=False, verbose_name='주간보고 다운로드 권한',
+        help_text='운영사무국 직원 중 주간 결과보고를 다운로드할 수 있는 사람만 체크'
+    )
 
     class Meta:
         verbose_name = '사용자'
@@ -49,6 +53,11 @@ class User(AbstractUser):
     @property
     def can_access_operations(self):
         return self.organization == 'operations'
+
+    @property
+    def can_access_weekly_report(self):
+        """주간 결과보고 다운로드 권한 — 운영사무국 소속이면서 권한이 부여된 직원만."""
+        return self.organization == 'operations' and self.can_download_weekly
 
     @property
     def can_access_sportsfield(self):
