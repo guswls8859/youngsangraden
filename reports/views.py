@@ -1553,22 +1553,69 @@ def _sf_slot(items, field_types, slot_start, slot_end):
     ])
 
 
+def _sf_place_dedup(rows):
+    """쿼터·행사 예약 묶음 → 연속 회차 중복 제거를 적용한 (건수, 예약인원합, 실사용인원합).
+
+    - 예약인원==실사용인원이고 같은 구장에서 시간이 맞붙은 '연속 회차'(2타임·풀타임
+      분할 저장)는 같은 건으로 보고 1회만 센다.
+    - 예약인원≠실사용인원(노쇼·부분참석 등)은 각 행을 그대로 센다.
+    rows: (field, time_start, time_end, res_p, use_p) 목록 (모두 쿼터·행사).
+    """
+    from collections import defaultdict
+
+    count = reserved = actual = 0
+    groups = defaultdict(list)   # (field, people) → [(time_start, time_end), ...]
+    for f, s, e, res_p, use_p in rows:
+        if res_p and res_p == use_p:
+            groups[(f, res_p)].append((s, e))
+        else:
+            count    += 1
+            reserved += res_p
+            actual   += use_p
+
+    for (_f, people), slots in groups.items():
+        timed   = sorted((sl for sl in slots if sl[0] is not None),
+                         key=lambda sl: sl[0])
+        untimed = [sl for sl in slots if sl[0] is None]
+        runs = len(untimed)          # 시작시간 모르는 건(수기 entry 등)은 각각 1건
+        prev_end = None
+        for s, e in timed:
+            end = e if e is not None else s
+            if prev_end is None or s > prev_end:   # 앞 회차와 끊기면 새 건
+                runs += 1
+                prev_end = end
+            elif end > prev_end:                    # 맞붙은 연속 회차 → 같은 건, 범위만 확장
+                prev_end = end
+        count    += runs
+        reserved += people * runs
+        actual   += people * runs
+
+    return count, reserved, actual
+
+
 def _sf_day_total(items, cat_filter):
-    """하루 전체 분류별 이용인원 합계. 각 예약을 1회만 센다(종일 예약도 1회).
+    """하루 전체 분류별 이용인원 합계.
 
     cat_filter: 'normal'(쿼터·행사 외) / 'quarter' / 'event'
+
+    - 일반·기타: 각 예약을 그대로 1회씩 합산.
+    - 쿼터·행사: 연속 회차 + 예약인원==실사용인원이면 같은 건으로 1회만 합산
+      (_sf_place_dedup). 예약≠실사용은 기존대로 전부 합산.
     """
     def _match(cat):
         if cat_filter == 'normal':
             return cat not in ('quarter', 'event')
         return cat == cat_filter
 
-    reserved = actual = 0
-    for _field, _s, _e, cat, res_p, use_p in items:
-        if not _match(cat):
-            continue
-        reserved += res_p
-        actual += use_p
+    matched = [(f, s, e, res_p, use_p)
+               for f, s, e, cat, res_p, use_p in items if _match(cat)]
+
+    if cat_filter == 'normal':
+        reserved = sum(res_p for _f, _s, _e, res_p, _u in matched)
+        actual   = sum(use_p for _f, _s, _e, _r, use_p in matched)
+    else:
+        _cnt, reserved, actual = _sf_place_dedup(matched)
+
     return {'reserved': reserved or None, 'actual': actual if reserved else None}
 
 
@@ -1807,16 +1854,18 @@ def _sf_weekly_day(items):
     """
     out = {}
     for key, ftypes in _SF_WEEKLY_FIELDS:
-        n_cnt = n_ppl = p_cnt = p_ppl = 0
-        for field, _s, _e, cat, res_p, use_p in items:
+        n_cnt = n_ppl = 0
+        place_rows = []
+        for field, s, e, cat, res_p, use_p in items:
             if field not in ftypes:
                 continue
             if cat in ('quarter', 'event'):
-                p_cnt += 1
-                p_ppl += use_p
+                place_rows.append((field, s, e, res_p, use_p))
             else:
                 n_cnt += 1
                 n_ppl += res_p
+        # 장소사용(쿼터·행사): 일보와 동일하게 연속 회차 중복 제거 적용
+        p_cnt, _res, p_ppl = _sf_place_dedup(place_rows)
         out[key] = {
             'normal': {'count': n_cnt, 'people': n_ppl},
             'place':  {'count': p_cnt, 'people': p_ppl},
