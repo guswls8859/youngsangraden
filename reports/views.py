@@ -1556,39 +1556,44 @@ def _sf_slot(items, field_types, slot_start, slot_end):
 def _sf_place_dedup(rows):
     """쿼터·행사 예약 묶음 → 연속 회차 중복 제거를 적용한 (건수, 예약인원합, 실사용인원합).
 
-    - 예약인원==실사용인원이고 같은 구장에서 시간이 맞붙은 '연속 회차'(2타임·풀타임
-      분할 저장)는 같은 건으로 보고 1회만 센다.
-    - 예약인원≠실사용인원(노쇼·부분참석 등)은 각 행을 그대로 센다.
+    같은 구장에서 '예약인원이 같은' 예약이 시간상 맞붙은 연속 회차(2타임·풀타임을
+    타임별로 나눠 저장한 경우)로 들어오면 같은 한 건으로 보고 1회만 센다.
+    - 예약인원이 다르면 다른 건으로 본다.
+    - 참석(실사용)인원 입력 여부와 무관하게 적용한다(예: 예약 80 / 사용 0 도 1건).
+    - 한 묶음의 실사용인원은 그 묶음 내 최댓값으로 집계한다.
     rows: (field, time_start, time_end, res_p, use_p) 목록 (모두 쿼터·행사).
     """
     from collections import defaultdict
 
     count = reserved = actual = 0
-    groups = defaultdict(list)   # (field, people) → [(time_start, time_end), ...]
+    groups = defaultdict(list)   # (field, 예약인원) → [(time_start, time_end, use_p), ...]
     for f, s, e, res_p, use_p in rows:
-        if res_p and res_p == use_p:
-            groups[(f, res_p)].append((s, e))
-        else:
-            count    += 1
-            reserved += res_p
-            actual   += use_p
+        groups[(f, res_p)].append((s, e, use_p))
 
     for (_f, people), slots in groups.items():
-        timed   = sorted((sl for sl in slots if sl[0] is not None),
-                         key=lambda sl: sl[0])
-        untimed = [sl for sl in slots if sl[0] is None]
-        runs = len(untimed)          # 시작시간 모르는 건(수기 entry 등)은 각각 1건
+        # 시작시간 모르는 건(수기 entry 등)은 각각 독립 1건으로
+        for s, e, u in slots:
+            if s is None:
+                count    += 1
+                reserved += people
+                actual   += u
+
+        timed = sorted((sl for sl in slots if sl[0] is not None),
+                       key=lambda sl: sl[0])
         prev_end = None
-        for s, e in timed:
+        run_use  = 0          # 현재 연속 묶음의 실사용인원(최댓값)
+        for s, e, u in timed:
             end = e if e is not None else s
-            if prev_end is None or s > prev_end:   # 앞 회차와 끊기면 새 건
-                runs += 1
+            if prev_end is not None and s <= prev_end:   # 맞붙은 연속 회차 → 같은 건
+                run_use  = max(run_use, u)
+                prev_end = max(prev_end, end)
+            else:                                        # 끊김 → 이전 묶음 확정 후 새 묶음
+                if prev_end is not None:
+                    count += 1; reserved += people; actual += run_use
+                run_use  = u
                 prev_end = end
-            elif end > prev_end:                    # 맞붙은 연속 회차 → 같은 건, 범위만 확장
-                prev_end = end
-        count    += runs
-        reserved += people * runs
-        actual   += people * runs
+        if prev_end is not None:                         # 마지막 묶음 확정
+            count += 1; reserved += people; actual += run_use
 
     return count, reserved, actual
 
@@ -1599,8 +1604,8 @@ def _sf_day_total(items, cat_filter):
     cat_filter: 'normal'(쿼터·행사 외) / 'quarter' / 'event'
 
     - 일반·기타: 각 예약을 그대로 1회씩 합산.
-    - 쿼터·행사: 연속 회차 + 예약인원==실사용인원이면 같은 건으로 1회만 합산
-      (_sf_place_dedup). 예약≠실사용은 기존대로 전부 합산.
+    - 쿼터·행사: 같은 구장에서 예약인원이 같은 예약이 연속 회차(2타임·풀타임을
+      타임별로 나눠 저장)로 들어오면 같은 건으로 보고 1회만 합산한다(_sf_place_dedup).
     """
     def _match(cat):
         if cat_filter == 'normal':
